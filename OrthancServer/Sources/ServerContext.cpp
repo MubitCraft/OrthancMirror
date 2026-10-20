@@ -1853,22 +1853,28 @@ namespace Orthanc
 
   DicomDataSource::Dicom* ServerContext::ReadDicomUntilPixelData(const std::string& instancePublicId)
   {
+    FindRequest findInstanceRequest(ResourceType_Instance);
+    findInstanceRequest.SetOrthancId(ResourceType_Instance, instancePublicId);
+    findInstanceRequest.SetRetrieveAttachments(true);
+    findInstanceRequest.SetRetrieveMetadata(true);
+
+    FindResponse findInstanceResponse;
+    index_.ExecuteFind(findInstanceResponse, findInstanceRequest);
+    const FindResponse::Resource& instance = findInstanceResponse.GetResourceByIdentifier(instancePublicId);
+
     FileInfo attachment;
     int64_t revision;  // Ignored
 
-    if (index_.LookupAttachment(attachment, revision, ResourceType_Instance,
-                                instancePublicId, FileContentType_DicomUntilPixelData))
+    if (instance.LookupAttachment(attachment, revision, FileContentType_DicomUntilPixelData))
     {
       return DicomDataSource::Execute(*dicomReader_, DicomDataSource::CreateWholeRequest(attachment));
     }
-    else
+    else if (instance.LookupAttachment(attachment, revision, FileContentType_Dicom))
     {
-      attachment = LookupDicomForInstance(instancePublicId);
-
       std::string metadata;
 
       if (attachment.GetCompressionType() == CompressionType_None &&
-          index_.LookupMetadata(metadata, instancePublicId, ResourceType_Instance,
+          instance.LookupMetadata(metadata, ResourceType_Instance,
                                 MetadataType_Instance_PixelDataOffset) &&
           !metadata.empty())
       {
@@ -1886,6 +1892,12 @@ namespace Orthanc
 
       // Fallback: The pixel data offset is not present or cannot be used, the whole DICOM file must be read
       return DicomDataSource::Execute(*dicomReader_, DicomDataSource::CreateWholeRequest(attachment));
+    }
+    else
+    {
+      throw OrthancException(ErrorCode_InternalError,
+                             "Unable to read attachment " + EnumerationToString(FileContentType_Dicom) +
+                             " of instance " + instancePublicId);      
     }
   }
 
