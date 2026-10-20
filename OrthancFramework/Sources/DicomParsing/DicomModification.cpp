@@ -1099,7 +1099,7 @@ namespace Orthanc
     {
       if (keepStudyInstanceUid_)
       {
-        LOG(WARNING) << "Modifying a study while keeping its original StudyInstanceUID: This should be avoided!";
+        LOG_WARNING("W104") << "Modifying a study while keeping its original StudyInstanceUID: This should be avoided!";
       }
       else
       {
@@ -1112,7 +1112,7 @@ namespace Orthanc
     {
       if (keepSeriesInstanceUid_)
       {
-        LOG(WARNING) << "Modifying a series while keeping its original SeriesInstanceUID: This should be avoided!";
+        LOG_WARNING("W103") << "Modifying a series while keeping its original SeriesInstanceUID: This should be avoided!";
       }
       else
       {
@@ -1125,7 +1125,7 @@ namespace Orthanc
     {
       if (keepSopInstanceUid_)
       {
-        LOG(WARNING) << "Modifying an instance while keeping its original SOPInstanceUID: This should be avoided!";
+        LOG_WARNING("W102") << "Modifying an instance while keeping its original SOPInstanceUID: This should be avoided!";
       }
       else
       {

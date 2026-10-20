@@ -32,6 +32,9 @@ Maintenance
   (https://discourse.orthanc-server.org/t/find-worklist-with-localaet-from-modality-configuration/6482)
 * Added new warnings that can be disabled in the configuration: 
   - W101_TruncatingDicomTagTo256Values
+  - W102_KeepSOPInstanceUIDInModification
+  - W103_KeepSeriesInstanceUIDInModification
+  - W104_KeepStudyInstanceUIDInModification
 * Fixed a deadlock in Anonymization/Modification jobs: some instances failing to be processed
   could keep the job in a "processing" state forever.
 * Fixed preview of YBR_FULL images encoded in JPEG-LS

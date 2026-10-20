@@ -61,7 +61,19 @@
 
     // Display a warning when Orthanc is truncating DICOMTag whose multiplicity is
     // higher than 256 values when converting the tags to JSON.
-    "W101_TruncatingDicomTagTo256Values" : true
+    "W101_TruncatingDicomTagTo256Values" : true,
+
+    // Display a warning when a user requests to modify an instance while
+    // keeping its SOPInstanceUID unchanged.
+    "W102_KeepSOPInstanceUIDInModification": true,
+
+    // Display a warning when a user requests to modify a series while
+    // keeping its SeriesInstanceUID unchanged.
+    "W103_KeepSeriesInstanceUIDInModification": true,
+
+    // Display a warning when a user requests to modify a study while
+    // keeping its StudyInstanceUID unchanged.
+    "W104_KeepStudyInstanceUIDInModification": true
   },
 
   // Path to the directory where Orthanc stores its large temporary
