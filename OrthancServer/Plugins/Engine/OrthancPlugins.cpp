@@ -5166,7 +5166,7 @@ namespace Orthanc
 
         {
           PImpl::ServerContextReference lock(*pimpl_);
-          std::unique_ptr<DicomDataSource::Dicom> loaded(lock.GetContext().ReadParsedDicom(params.instanceId));
+          std::unique_ptr<DicomDataSource::Dicom> loaded(lock.GetContext().ReadDicomUntilPixelData(params.instanceId));
           parsed.reset(loaded->Clone());
         }
 
