@@ -1032,7 +1032,7 @@ namespace Orthanc
 
     MetricsRegistry& registry = context.GetMetricsRegistry();
     registry.SetFloatValue("orthanc_disk_size_mb", static_cast<float>(diskSize) / MEGABYTE);
-    registry.SetFloatValue("orthanc_uncompressed_size_mb", static_cast<float>(diskSize) / MEGABYTE);
+    registry.SetFloatValue("orthanc_uncompressed_size_mb", static_cast<float>(uncompressedSize) / MEGABYTE);
     registry.SetIntegerValue("orthanc_count_patients", static_cast<int64_t>(countPatients));
     registry.SetIntegerValue("orthanc_count_studies", static_cast<int64_t>(countStudies));
     registry.SetIntegerValue("orthanc_count_series", static_cast<int64_t>(countSeries));

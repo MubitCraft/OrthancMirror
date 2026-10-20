@@ -42,6 +42,8 @@ Maintenance
 * Reduced the number of SQL queries when accessing /instances/../tags
 * Fixed performance regression when a plugin is accessing only the DICOM tags of a file
   (https://discourse.orthanc-server.org/t/1-13-0-orthancpluginloaddicominstance-reads-the-whole-dicom-file-in-emptypixeldata-and-untilpixeldata-modes/6489)
+* Fix uncompressed size in Prometheus metrics
+  (https://discourse.orthanc-server.org/t/fixing-prometheus-metrics-contribution/6490)
 * Fix use of the static runtime under Visual Studio (/MT), which broke in 1.12.10
 * New CMake options: 
   - "THIRD_PARTY_DOWNLOADS_ROOT_URL" to specify another webserver to downloads the third-parties from.
