@@ -652,6 +652,7 @@ if (ORTHANC_ENABLE_THREADS)
     ${CMAKE_CURRENT_LIST_DIR}/../../Sources/MultiThreading/BlockingSharedMessageQueue.cpp
     ${CMAKE_CURRENT_LIST_DIR}/../../Sources/MultiThreading/Internals/FutureState.cpp
     ${CMAKE_CURRENT_LIST_DIR}/../../Sources/MultiThreading/Internals/ThreadPoolFuture.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../../Sources/MultiThreading/PeriodicRunnableThread.cpp
     ${CMAKE_CURRENT_LIST_DIR}/../../Sources/MultiThreading/RunnableWorkersPool.cpp
     ${CMAKE_CURRENT_LIST_DIR}/../../Sources/MultiThreading/Semaphore.cpp
     ${CMAKE_CURRENT_LIST_DIR}/../../Sources/MultiThreading/SharedMessageQueue.cpp
