@@ -102,6 +102,12 @@ namespace Orthanc
     {
       throw OrthancException(ErrorCode_NullPointer);
     }
+
+    // Reduce the default granularity if the runnable must be executed faster
+    if (delay_ < timeResolution_)
+    {
+      timeResolution_ = delay_;
+    }
   }
 
 
