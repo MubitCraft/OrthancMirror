@@ -23,6 +23,7 @@
 
 #pragma once
 
+#include "../Compatibility.h"  // For std::unique_ptr<>
 #include "IRunnable.h"
 
 #include <boost/thread.hpp>
