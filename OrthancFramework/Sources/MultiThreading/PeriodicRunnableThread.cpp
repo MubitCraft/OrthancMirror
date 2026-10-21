@@ -28,8 +28,16 @@
 
 namespace Orthanc
 {
+  static boost::posix_time::ptime GetNow()
+  {
+    return boost::posix_time::microsec_clock::universal_time();
+  }
+
+
   void PeriodicRunnableThread::Worker(PeriodicRunnableThread* that)
   {
+    boost::posix_time::ptime nextExecutionTime = GetNow();
+
     for (;;)
     {
       {
@@ -40,11 +48,19 @@ namespace Orthanc
         }
       }
 
-      that->runnable_->Run();
+      const boost::posix_time::ptime now = GetNow();
 
-      if (that->timeResolution_ != 0)
+      if (now >= nextExecutionTime)
       {
-        boost::this_thread::sleep(boost::posix_time::milliseconds(that->timeResolution_));
+        that->runnable_->Run();
+        nextExecutionTime = now + boost::posix_time::milliseconds(that->delay_);
+      }
+      else
+      {
+        if (that->timeResolution_ != 0)
+        {
+          boost::this_thread::sleep(boost::posix_time::milliseconds(that->timeResolution_));
+        }
       }
     }
   }
@@ -76,14 +92,30 @@ namespace Orthanc
 
 
   PeriodicRunnableThread::PeriodicRunnableThread(IRunnable* runnable,
-                                                 unsigned int timeResolution) :
+                                                 unsigned int delay) :
     runnable_(runnable),
-    timeResolution_(timeResolution),
+    delay_(delay),
+    timeResolution_(50),  // By default, use a time granularity of 50ms
     state_(State_Initialization)
   {
     if (runnable == NULL)
     {
       throw OrthancException(ErrorCode_NullPointer);
+    }
+  }
+
+
+  void PeriodicRunnableThread::SetTimeResolution(unsigned int resolution)
+  {
+    boost::mutex::scoped_lock lock(mutex_);
+
+    if (state_ != State_Initialization)
+    {
+      throw OrthancException(ErrorCode_BadSequenceOfCalls);
+    }
+    else
+    {
+      timeResolution_ = resolution;
     }
   }
 

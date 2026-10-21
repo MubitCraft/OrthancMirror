@@ -48,18 +48,26 @@ namespace Orthanc
 
     boost::mutex                mutex_;
     std::unique_ptr<IRunnable>  runnable_;
-    unsigned int                timeResolution_;
+    unsigned int                delay_;  // In milliseconds
+    unsigned int                timeResolution_;  // In milliseconds
     volatile State              state_;
     boost::thread               thread_;
 
   public:
     PeriodicRunnableThread(IRunnable* runnable /* takes ownership */,
-                           unsigned int timeResolution);
+                           unsigned int delay /* number of milliseconds between 2 executions */);
 
     ~PeriodicRunnableThread()
     {
       StopInternal(false /* no exception in destructors */);
     }
+
+    /**
+     * Set the granularity (in milliseconds) at which "Stop()" is
+     * checked for while waiting between two executions of the
+     * runnable, can be useful for testing.
+     **/
+    void SetTimeResolution(unsigned int resolution);
 
     void Start();
 
