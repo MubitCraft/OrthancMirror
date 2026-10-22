@@ -107,7 +107,7 @@ set(USE_LEGACY_BOOST OFF CACHE BOOL "Use boost 1.69.0, latest version to be comp
 set(MSVC_MULTIPLE_PROCESSES OFF CACHE BOOL "Add the /MP option to build with multiple processes if using Visual Studio")
 set(EMSCRIPTEN_TARGET_MODE "wasm" CACHE STRING "Sets the target mode for Emscripten (can be \"wasm\" or \"asm.js\")")
 set(EMSCRIPTEN_TRAP_MODE "" CACHE STRING "Sets the trap mode for Emscripten for numeric errors (can notably be empty, or \"clamp\")")
-set(OPENSSL_STATIC_VERSION "3.0" CACHE STRING "Version of OpenSSL to be used in static builds (can be \"1.1.1\" or \"3.0\")")
+set(OPENSSL_STATIC_VERSION "default" CACHE STRING "Version of OpenSSL to be used in static builds (can be \"1.1.1\", \"3.1.4\", or \"default\")")
 set(CIVETWEB_OPENSSL_API "1.1" CACHE STRING "Version of the OpenSSL API to be used in civetweb in static builds (can be \"1.0\" or \"1.1\"")
 set(ORTHANC_LUA_VERSION "" CACHE STRING "Force the version of Lua to be used by Orthanc (for instance \"5.3\"), if empty, this will be autodetected")
 

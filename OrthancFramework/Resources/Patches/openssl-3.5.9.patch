@@ -1,0 +1,46 @@
+diff -urEb openssl-3.5.9.orig/crypto/riscvcap.c openssl-3.5.9/crypto/riscvcap.c
+--- openssl-3.5.9.orig/crypto/riscvcap.c	2026-10-21 15:53:55.753158664 +0200
++++ openssl-3.5.9/crypto/riscvcap.c	2026-10-21 15:54:38.701799356 +0200
+@@ -49,7 +49,8 @@
+ 
+ static void strtoupper(const char *str, char *dst, size_t dstlen)
+ {
+-    for (size_t i = 0; i < dstlen; i++) {
++    size_t i;
++    for (i = 0; i < dstlen; i++) {
+         if (i == dstlen - 1 || str[i] == '\0') {
+             dst[i] = '\0';
+             break;
+@@ -68,11 +69,12 @@
+ {
+     char envstrupper[BUFLEN];
+     char buf[BUFLEN];
++    size_t i;
+ 
+     /* Convert env str to all uppercase */
+     strtoupper(envstr, envstrupper, sizeof(envstrupper));
+ 
+-    for (size_t i = 0; i < kRISCVNumCaps; ++i) {
++    for (i = 0; i < kRISCVNumCaps; ++i) {
+         size_t len = strlen(RISCV_capabilities[i].name);
+         /* Prefix capability with underscore in preparation for search */
+         /*
+diff -urEb openssl-3.5.9.orig/providers/implementations/rands/seeding/rand_unix.c openssl-3.5.9/providers/implementations/rands/seeding/rand_unix.c
+--- openssl-3.5.9.orig/providers/implementations/rands/seeding/rand_unix.c	2026-10-21 15:53:55.778158455 +0200
++++ openssl-3.5.9/providers/implementations/rands/seeding/rand_unix.c	2026-10-21 15:55:07.885556035 +0200
+@@ -453,6 +453,7 @@
+              * system call and this should always succeed which renders
+              * this alternative but essentially identical source moot.
+              */
++#if !defined(__LSB_VERSION__)  // "syscall()" is not available in LSB
+             if (uname(&un) == 0) {
+                 kernel[0] = atoi(un.release);
+                 p = strchr(un.release, '.');
+@@ -463,6 +464,7 @@
+                     return 0;
+                 }
+             }
++#endif
+             /* Open /dev/random and wait for it to be readable */
+             if ((fd = open(DEVRANDOM_WAIT, O_RDONLY)) != -1) {
+                 if (DEVRANDM_WAIT_USE_SELECT && fd < FD_SETSIZE) {

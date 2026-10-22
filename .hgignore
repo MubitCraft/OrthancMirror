@@ -5,8 +5,10 @@ CMakeLists.txt.user
 *.cpp.rej
 *.h.orig
 *.h.rej
+*.json.orig
 *.patch.orig
 *.patch.rej
+*.py.orig
 .vs/
 .vscode/
 *~

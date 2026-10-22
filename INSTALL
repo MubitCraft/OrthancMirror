@@ -14,11 +14,14 @@ Dependencies
 3) Mercurial: To use the cutting edge code, a Mercurial client must be
    installed (http://mercurial.selenic.com/). We recommend TortoiseHg.
 
+4) Perl: Needed for recent static builds of OpenSSL. We recommend
+   Strawberry Perl on Microsoft Windows.
+
 W) 7-Zip: For the native build under Windows, the 7-Zip tool is used
    to uncompress the third-party packages (http://www.7-zip.org/).
 
-You thus have to download and install CMake, Python, Mercurial and
-possibly 7-Zip first. The path to their executable must be in the
+You thus have to download and install CMake, Python, Mercurial, Perl,
+and possibly 7-Zip first. The path to their executable must be in the
 "PATH" environment variable.
 
 The other third party dependencies are automatically downloaded by the
