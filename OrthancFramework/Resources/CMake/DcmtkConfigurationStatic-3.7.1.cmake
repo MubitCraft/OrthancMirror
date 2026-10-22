@@ -332,7 +332,7 @@ endif()
 # setting "-DUSE_SYSTEM_CIVETWEB=OFF". This is because the system-wide
 # civetweb shared library is built by setting the CMake option
 # "CIVETWEB_THREAD_STACK_SIZE" to its default value (102400), which in
-# turn defines the macro "USE_STACK_SIZE", which finally lead to a
+# turn defines the macro "USE_STACK_SIZE", which finally results in a
 # call to "pthread_attr_setstacksize()". If the macro "USE_STACK_SIZE"
 # is not defined (which is the case with "-DUSE_SYSTEM_CIVETWEB=OFF"),
 # "pthread_attr_setstacksize()" is not called and the civetweb workers
