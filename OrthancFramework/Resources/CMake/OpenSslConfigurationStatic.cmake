@@ -53,10 +53,17 @@ if (FirstRun)
     message(FATAL_ERROR "Error while patching a file")
   endif()
 
+
   # Execute the "config" script from the OpenSSL source distribution
+  if ("${CMAKE_SYSTEM_VERSION}" STREQUAL "LinuxStandardBase")
+    set(Options --with-rand-seed=devrandom)
+  else()
+    set(Options)
+  endif()
+
   execute_process(
     COMMAND ${PERL_EXECUTABLE}
-    Configure no-asm
+    Configure no-asm ${Options}
     WORKING_DIRECTORY ${OPENSSL_SOURCES_DIR}
     RESULT_VARIABLE Failure
     )
@@ -64,6 +71,7 @@ if (FirstRun)
   if (Failure)
     message(FATAL_ERROR "Error while configuring OpenSSL using Perl")
   endif()
+
 
   # Create ${GENERATED_MANDATORY} targets from the Makefile of OpenSSL
   execute_process(
@@ -336,7 +344,7 @@ set(OPENSSL_SOURCES_SUBDIRS
 
 if (ENABLE_OPENSSL_ENGINES)
   list(APPEND OPENSSL_SOURCES_SUBDIRS
-    ${OPENSSL_SOURCES_DIR}/engines
+    # ${OPENSSL_SOURCES_DIR}/engines   # Removed in Orthanc 1.13.1
     ${OPENSSL_SOURCES_DIR}/crypto/engine
     )
 else()
@@ -371,22 +379,32 @@ list(REMOVE_ITEM OPENSSL_SOURCES
   ${OPENSSL_SOURCES_DIR}/crypto/LPdir_win.c
   ${OPENSSL_SOURCES_DIR}/crypto/LPdir_win32.c
   ${OPENSSL_SOURCES_DIR}/crypto/LPdir_wince.c
+  ${OPENSSL_SOURCES_DIR}/crypto/bn/bn_ppc.c
+  ${OPENSSL_SOURCES_DIR}/crypto/bn/bn_sparc.c
+  ${OPENSSL_SOURCES_DIR}/crypto/chacha/chacha_ppc.c
+  ${OPENSSL_SOURCES_DIR}/crypto/chacha/chacha_riscv.c
+  ${OPENSSL_SOURCES_DIR}/crypto/des/ncbc_enc.c
   ${OPENSSL_SOURCES_DIR}/crypto/ec/ecp_nistp224.c
   ${OPENSSL_SOURCES_DIR}/crypto/ec/ecp_nistp256.c
   ${OPENSSL_SOURCES_DIR}/crypto/ec/ecp_nistp384.c
   ${OPENSSL_SOURCES_DIR}/crypto/ec/ecp_nistp521.c
+  ${OPENSSL_SOURCES_DIR}/crypto/ec/ecp_nistz256.c
   ${OPENSSL_SOURCES_DIR}/crypto/ec/ecp_nistz256_table.c
+  ${OPENSSL_SOURCES_DIR}/crypto/ec/ecp_ppc.c
   ${OPENSSL_SOURCES_DIR}/crypto/ec/ecp_s390x_nistp.c
+  ${OPENSSL_SOURCES_DIR}/crypto/ec/ecp_sm2p256.c
   ${OPENSSL_SOURCES_DIR}/crypto/ec/ecx_s390x.c
   ${OPENSSL_SOURCES_DIR}/crypto/evp/legacy_md2.c
   ${OPENSSL_SOURCES_DIR}/crypto/poly1305/poly1305_base2_44.c
+  ${OPENSSL_SOURCES_DIR}/crypto/poly1305/poly1305_ppc.c
   ${OPENSSL_SOURCES_DIR}/crypto/rc5/rc5_ecb.c
   ${OPENSSL_SOURCES_DIR}/crypto/rc5/rc5_enc.c
   ${OPENSSL_SOURCES_DIR}/crypto/rc5/rc5_skey.c
   ${OPENSSL_SOURCES_DIR}/crypto/rc5/rc5cfb64.c
   ${OPENSSL_SOURCES_DIR}/crypto/rc5/rc5ofb64.c
   ${OPENSSL_SOURCES_DIR}/crypto/rsa/rsa_acvp_test_params.c
-  ${OPENSSL_SOURCES_DIR}/engines/e_devcrypto.c
+  ${OPENSSL_SOURCES_DIR}/crypto/sha/sha_ppc.c
+  ${OPENSSL_SOURCES_DIR}/crypto/sm3/sm3_riscv.c
   ${OPENSSL_SOURCES_DIR}/providers/common/securitycheck_fips.c
   ${OPENSSL_SOURCES_DIR}/providers/implementations/ciphers/cipher_rc5.c
   ${OPENSSL_SOURCES_DIR}/providers/implementations/ciphers/cipher_rc5_hw.c
@@ -396,7 +414,7 @@ list(REMOVE_ITEM OPENSSL_SOURCES
 
   ${OPENSSL_SOURCES_DIR}/crypto/poly1305/poly1305_ieee754.c  # Fails on Visual Studio
   ${OPENSSL_SOURCES_DIR}/crypto/sha/sha_riscv.c  # Fails on LSB
-  ${OPENSSL_SOURCES_DIR}/engines/e_afalg.c  # Fails on OS X and Visual Studio
+  ${OPENSSL_SOURCES_DIR}/providers/legacyprov.c  # Fails on LSB
 
   # Disable CPUID for non-x86 platforms
   ${OPENSSL_SOURCES_DIR}/crypto/armcap.c
@@ -421,6 +439,10 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Linux" OR
   list(REMOVE_ITEM OPENSSL_SOURCES
     ${OPENSSL_SOURCES_DIR}/providers/implementations/storemgmt/winstore_store.c
     )
+
+  if ("${CMAKE_SYSTEM_VERSION}" STREQUAL "LinuxStandardBase")
+    add_definitions(-DHAVE_MADVISE=0)
+  endif()
 
 elseif("${CMAKE_SYSTEM_NAME}" STREQUAL "Windows")
   list(APPEND OPENSSL_SOURCES
