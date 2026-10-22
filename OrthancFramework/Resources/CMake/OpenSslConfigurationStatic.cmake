@@ -464,5 +464,6 @@ elseif("${CMAKE_SYSTEM_NAME}" STREQUAL "Windows")
     ${OPENSSL_SOURCES_DIR}/crypto/thread/arch/thread_win.c
     ${OPENSSL_SOURCES_DIR}/providers/implementations/rands/seeding/rand_win.c
     )
+  link_libraries(crypt32)
 
 endif()
