@@ -1,6 +1,6 @@
 diff -urEb dcmtk-3.7.1.orig/CMake/GenerateDCMTKConfigure.cmake dcmtk-3.7.1/CMake/GenerateDCMTKConfigure.cmake
 --- dcmtk-3.7.1.orig/CMake/GenerateDCMTKConfigure.cmake	2026-10-22 14:34:24.176418031 +0200
-+++ dcmtk-3.7.1/CMake/GenerateDCMTKConfigure.cmake	2026-10-22 14:40:22.782013520 +0200
++++ dcmtk-3.7.1/CMake/GenerateDCMTKConfigure.cmake	2026-10-22 15:31:09.640580707 +0200
 @@ -227,9 +227,12 @@
  
  # Check the sizes of various types
@@ -27,7 +27,7 @@ diff -urEb dcmtk-3.7.1.orig/CMake/GenerateDCMTKConfigure.cmake dcmtk-3.7.1/CMake
  endif()
 diff -urEb dcmtk-3.7.1.orig/dcmdata/include/dcmtk/dcmdata/dcdict.h dcmtk-3.7.1/dcmdata/include/dcmtk/dcmdata/dcdict.h
 --- dcmtk-3.7.1.orig/dcmdata/include/dcmtk/dcmdata/dcdict.h	2026-10-22 14:34:24.164418109 +0200
-+++ dcmtk-3.7.1/dcmdata/include/dcmtk/dcmdata/dcdict.h	2026-10-22 14:40:13.268078525 +0200
++++ dcmtk-3.7.1/dcmdata/include/dcmtk/dcmdata/dcdict.h	2026-10-22 15:31:09.641580704 +0200
 @@ -163,6 +163,12 @@
      /// returns an iterator to the end of the repeating groups data dictionary
      DcmDictEntryListIterator repeatingEnd() { return repDict.end(); }
@@ -43,7 +43,7 @@ diff -urEb dcmtk-3.7.1.orig/dcmdata/include/dcmtk/dcmdata/dcdict.h dcmtk-3.7.1/d
      /** private undefined assignment operator
 diff -urEb dcmtk-3.7.1.orig/dcmdata/libsrc/dcdict.cc dcmtk-3.7.1/dcmdata/libsrc/dcdict.cc
 --- dcmtk-3.7.1.orig/dcmdata/libsrc/dcdict.cc	2026-10-22 14:34:24.167418090 +0200
-+++ dcmtk-3.7.1/dcmdata/libsrc/dcdict.cc	2026-10-22 14:40:13.268078525 +0200
++++ dcmtk-3.7.1/dcmdata/libsrc/dcdict.cc	2026-10-22 15:31:09.642580701 +0200
 @@ -904,3 +904,5 @@
    wrlock().clear();
    wrunlock();
@@ -52,7 +52,7 @@ diff -urEb dcmtk-3.7.1.orig/dcmdata/libsrc/dcdict.cc dcmtk-3.7.1/dcmdata/libsrc/
 +#include "dcdict_orthanc.cc"
 diff -urEb dcmtk-3.7.1.orig/dcmdata/libsrc/dclist.cc dcmtk-3.7.1/dcmdata/libsrc/dclist.cc
 --- dcmtk-3.7.1.orig/dcmdata/libsrc/dclist.cc	2026-10-22 14:34:24.166418096 +0200
-+++ dcmtk-3.7.1/dcmdata/libsrc/dclist.cc	2026-10-22 14:40:13.268078525 +0200
++++ dcmtk-3.7.1/dcmdata/libsrc/dclist.cc	2026-10-22 15:31:09.642580701 +0200
 @@ -19,6 +19,11 @@
   *
   */
@@ -67,7 +67,7 @@ diff -urEb dcmtk-3.7.1.orig/dcmdata/libsrc/dclist.cc dcmtk-3.7.1/dcmdata/libsrc/
  #include "dcmtk/ofstd/ofstream.h"
 diff -urEb dcmtk-3.7.1.orig/dcmdata/libsrc/dcpxitem.cc dcmtk-3.7.1/dcmdata/libsrc/dcpxitem.cc
 --- dcmtk-3.7.1.orig/dcmdata/libsrc/dcpxitem.cc	2026-10-22 14:34:24.166418096 +0200
-+++ dcmtk-3.7.1/dcmdata/libsrc/dcpxitem.cc	2026-10-22 14:40:13.268078525 +0200
++++ dcmtk-3.7.1/dcmdata/libsrc/dcpxitem.cc	2026-10-22 15:31:09.642580701 +0200
 @@ -31,6 +31,8 @@
  #include "dcmtk/dcmdata/dcostrma.h"    /* for class DcmOutputStream */
  #include "dcmtk/dcmdata/dcwcache.h"    /* for class DcmWriteCache */
@@ -79,7 +79,7 @@ diff -urEb dcmtk-3.7.1.orig/dcmdata/libsrc/dcpxitem.cc dcmtk-3.7.1/dcmdata/libsr
  
 diff -urEb dcmtk-3.7.1.orig/dcmimgle/libsrc/dimoimg.cc dcmtk-3.7.1/dcmimgle/libsrc/dimoimg.cc
 --- dcmtk-3.7.1.orig/dcmimgle/libsrc/dimoimg.cc	2026-10-22 14:34:24.173418050 +0200
-+++ dcmtk-3.7.1/dcmimgle/libsrc/dimoimg.cc	2026-10-22 14:40:13.269078519 +0200
++++ dcmtk-3.7.1/dcmimgle/libsrc/dimoimg.cc	2026-10-22 15:31:09.643580698 +0200
 @@ -20,6 +20,10 @@
   */
  
@@ -93,7 +93,7 @@ diff -urEb dcmtk-3.7.1.orig/dcmimgle/libsrc/dimoimg.cc dcmtk-3.7.1/dcmimgle/libs
  
 diff -urEb dcmtk-3.7.1.orig/dcmnet/libsrc/scu.cc dcmtk-3.7.1/dcmnet/libsrc/scu.cc
 --- dcmtk-3.7.1.orig/dcmnet/libsrc/scu.cc	2026-10-22 14:34:24.198417887 +0200
-+++ dcmtk-3.7.1/dcmnet/libsrc/scu.cc	2026-10-22 14:40:13.271078505 +0200
++++ dcmtk-3.7.1/dcmnet/libsrc/scu.cc	2026-10-22 15:31:09.644580694 +0200
 @@ -19,6 +19,11 @@
   *
   */
@@ -108,7 +108,7 @@ diff -urEb dcmtk-3.7.1.orig/dcmnet/libsrc/scu.cc dcmtk-3.7.1/dcmnet/libsrc/scu.c
  #include "dcmtk/dcmdata/dcostrmf.h" /* for class DcmOutputFileStream */
 diff -urEb dcmtk-3.7.1.orig/oficonv/include/dcmtk/oficonv/iconv.h dcmtk-3.7.1/oficonv/include/dcmtk/oficonv/iconv.h
 --- dcmtk-3.7.1.orig/oficonv/include/dcmtk/oficonv/iconv.h	2026-10-22 14:34:24.181417998 +0200
-+++ dcmtk-3.7.1/oficonv/include/dcmtk/oficonv/iconv.h	2026-10-22 14:40:13.271078505 +0200
++++ dcmtk-3.7.1/oficonv/include/dcmtk/oficonv/iconv.h	2026-10-22 15:31:09.644580694 +0200
 @@ -53,7 +53,12 @@
  #endif
  
@@ -124,7 +124,7 @@ diff -urEb dcmtk-3.7.1.orig/oficonv/include/dcmtk/oficonv/iconv.h dcmtk-3.7.1/of
  #define OFICONV_CITRUS_WC_T_DEFINED
 diff -urEb dcmtk-3.7.1.orig/oficonv/libsrc/citrus_csmapper.c dcmtk-3.7.1/oficonv/libsrc/citrus_csmapper.c
 --- dcmtk-3.7.1.orig/oficonv/libsrc/citrus_csmapper.c	2026-10-22 14:34:24.181417998 +0200
-+++ dcmtk-3.7.1/oficonv/libsrc/citrus_csmapper.c	2026-10-22 14:40:13.272078498 +0200
++++ dcmtk-3.7.1/oficonv/libsrc/citrus_csmapper.c	2026-10-22 15:31:09.644580694 +0200
 @@ -61,7 +61,8 @@
  
  #ifdef WITH_THREADS
@@ -152,7 +152,7 @@ diff -urEb dcmtk-3.7.1.orig/oficonv/libsrc/citrus_csmapper.c dcmtk-3.7.1/oficonv
      getCSMapperPath(mapper_path, sizeof(mapper_path), NULL);
 diff -urEb dcmtk-3.7.1.orig/oficonv/libsrc/citrus_iconv.c dcmtk-3.7.1/oficonv/libsrc/citrus_iconv.c
 --- dcmtk-3.7.1.orig/oficonv/libsrc/citrus_iconv.c	2026-10-22 14:34:24.190417939 +0200
-+++ dcmtk-3.7.1/oficonv/libsrc/citrus_iconv.c	2026-10-22 14:40:13.272078498 +0200
++++ dcmtk-3.7.1/oficonv/libsrc/citrus_iconv.c	2026-10-22 15:31:09.645580691 +0200
 @@ -47,7 +47,15 @@
  #endif
  
@@ -208,7 +208,7 @@ diff -urEb dcmtk-3.7.1.orig/oficonv/libsrc/citrus_iconv.c dcmtk-3.7.1/oficonv/li
  
 diff -urEb dcmtk-3.7.1.orig/oficonv/libsrc/citrus_lock.h dcmtk-3.7.1/oficonv/libsrc/citrus_lock.h
 --- dcmtk-3.7.1.orig/oficonv/libsrc/citrus_lock.h	2026-10-22 14:34:24.188417952 +0200
-+++ dcmtk-3.7.1/oficonv/libsrc/citrus_lock.h	2026-10-22 14:40:13.272078498 +0200
++++ dcmtk-3.7.1/oficonv/libsrc/citrus_lock.h	2026-10-22 15:31:09.645580691 +0200
 @@ -31,7 +31,7 @@
  
  #ifdef WITH_THREADS
@@ -220,7 +220,7 @@ diff -urEb dcmtk-3.7.1.orig/oficonv/libsrc/citrus_lock.h dcmtk-3.7.1/oficonv/lib
  #define WLOCK(lock)   AcquireSRWLockExclusive(lock);
 diff -urEb dcmtk-3.7.1.orig/oficonv/libsrc/citrus_mapper.c dcmtk-3.7.1/oficonv/libsrc/citrus_mapper.c
 --- dcmtk-3.7.1.orig/oficonv/libsrc/citrus_mapper.c	2026-10-22 14:34:24.186417965 +0200
-+++ dcmtk-3.7.1/oficonv/libsrc/citrus_mapper.c	2026-10-22 14:40:13.273078491 +0200
++++ dcmtk-3.7.1/oficonv/libsrc/citrus_mapper.c	2026-10-22 15:31:09.645580691 +0200
 @@ -61,7 +61,8 @@
  
  #ifdef WITH_THREADS
@@ -247,7 +247,7 @@ diff -urEb dcmtk-3.7.1.orig/oficonv/libsrc/citrus_mapper.c dcmtk-3.7.1/oficonv/l
      WLOCK(&cm_lock);
 diff -urEb dcmtk-3.7.1.orig/oflog/include/dcmtk/oflog/thread/syncpub.h dcmtk-3.7.1/oflog/include/dcmtk/oflog/thread/syncpub.h
 --- dcmtk-3.7.1.orig/oflog/include/dcmtk/oflog/thread/syncpub.h	2026-10-22 14:34:24.133418312 +0200
-+++ dcmtk-3.7.1/oflog/include/dcmtk/oflog/thread/syncpub.h	2026-10-22 14:40:13.273078491 +0200
++++ dcmtk-3.7.1/oflog/include/dcmtk/oflog/thread/syncpub.h	2026-10-22 15:31:09.645580691 +0200
 @@ -63,7 +63,7 @@
  
  DCMTK_LOG4CPLUS_INLINE_EXPORT
@@ -286,7 +286,7 @@ diff -urEb dcmtk-3.7.1.orig/oflog/include/dcmtk/oflog/thread/syncpub.h dcmtk-3.7
  
 diff -urEb dcmtk-3.7.1.orig/oflog/libsrc/oflog.cc dcmtk-3.7.1/oflog/libsrc/oflog.cc
 --- dcmtk-3.7.1.orig/oflog/libsrc/oflog.cc	2026-10-22 14:34:24.136418292 +0200
-+++ dcmtk-3.7.1/oflog/libsrc/oflog.cc	2026-10-22 14:40:13.273078491 +0200
++++ dcmtk-3.7.1/oflog/libsrc/oflog.cc	2026-10-22 15:31:09.645580691 +0200
 @@ -19,6 +19,11 @@
   *
   */
@@ -301,7 +301,7 @@ diff -urEb dcmtk-3.7.1.orig/oflog/libsrc/oflog.cc dcmtk-3.7.1/oflog/libsrc/oflog
  
 diff -urEb dcmtk-3.7.1.orig/ofstd/include/dcmtk/ofstd/offile.h dcmtk-3.7.1/ofstd/include/dcmtk/ofstd/offile.h
 --- dcmtk-3.7.1.orig/ofstd/include/dcmtk/ofstd/offile.h	2026-10-22 14:34:24.193417920 +0200
-+++ dcmtk-3.7.1/ofstd/include/dcmtk/ofstd/offile.h	2026-10-22 14:40:13.273078491 +0200
++++ dcmtk-3.7.1/ofstd/include/dcmtk/ofstd/offile.h	2026-10-22 15:31:09.646580688 +0200
 @@ -560,7 +560,7 @@
     */
    void setlinebuf()
@@ -313,7 +313,7 @@ diff -urEb dcmtk-3.7.1.orig/ofstd/include/dcmtk/ofstd/offile.h dcmtk-3.7.1/ofstd
      :: setlinebuf(file_);
 diff -urEb dcmtk-3.7.1.orig/ofstd/libsrc/ofstub.cc dcmtk-3.7.1/ofstd/libsrc/ofstub.cc
 --- dcmtk-3.7.1.orig/ofstd/libsrc/ofstub.cc	2026-10-22 14:34:24.196417900 +0200
-+++ dcmtk-3.7.1/ofstd/libsrc/ofstub.cc	2026-10-22 14:40:13.274078485 +0200
++++ dcmtk-3.7.1/ofstd/libsrc/ofstub.cc	2026-10-22 15:31:09.646580688 +0200
 @@ -35,6 +35,10 @@
  #include <windows.h>
  #endif /* HAVE_WINDOWS_H */
@@ -325,3 +325,14 @@ diff -urEb dcmtk-3.7.1.orig/ofstd/libsrc/ofstub.cc dcmtk-3.7.1/ofstd/libsrc/ofst
  #define EXITCODE_CANNOT_DETERMINE_DIR        90
  #define EXITCODE_EXEC_FAILED                 91
  #define EXITCODE_ILLEGAL_PARAMS              92
+diff -urEb dcmtk-3.7.1.orig/ofstd/libsrc/oftime.cc dcmtk-3.7.1/ofstd/libsrc/oftime.cc
+--- dcmtk-3.7.1.orig/ofstd/libsrc/oftime.cc	2026-10-22 14:34:24.196417900 +0200
++++ dcmtk-3.7.1/ofstd/libsrc/oftime.cc	2026-10-22 15:31:33.007503386 +0200
+@@ -59,6 +59,7 @@
+ const double OFTime::unspecifiedSecond = OFnumeric_limits<double>::quiet_NaN();
+ const double OFTime::unspecifiedTimeZone = OFnumeric_limits<double>::quiet_NaN();
+ #else
++#undef max
+ const double OFTime::unspecifiedSecond = OFnumeric_limits<double>::max();
+ const double OFTime::unspecifiedTimeZone = OFnumeric_limits<double>::max();
+ #endif
