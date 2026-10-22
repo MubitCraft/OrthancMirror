@@ -48,6 +48,7 @@ Maintenance
 * New CMake options: 
   - "THIRD_PARTY_DOWNLOADS_ROOT_URL" to specify another webserver to downloads the third-parties from.
   - "ORTHANC_SOURCES_DOWNLOADS_ROOT_URL" to specify another webserver to downloads the Orthanc sources from.
+* Setting DCMTK_MAX_SEQUENCE_NESTING to 32
 * Upgraded dependencies for static builds:
   - dcmtk 3.7.1
   - openssl 3.5.9 (LTS branch)

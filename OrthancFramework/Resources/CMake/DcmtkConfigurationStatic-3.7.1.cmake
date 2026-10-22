@@ -318,3 +318,17 @@ endif()
 if (DCMTK_LOCALE_BACKEND STREQUAL "oficonv")
   AUX_SOURCE_DIRECTORY(${DCMTK_SOURCES_DIR}/oficonv/libsrc DCMTK_SOURCES)
 endif()
+
+
+# 2026-10-22: On several GNU/Linux distributions (notably Ubuntu
+# 22.04), Orthanc was observed to crash when using the system-wide
+# civetweb library and allowing DCMTK to process sequences nested up
+# to 37 levels deep. This issue can be reproduced using the DICOM
+# sample file
+# "orthanc-tests/Database/2026-05-06-Deeply-Nested-Sequence.dcm". The
+# issue does not occur when civetweb is statically linked by setting
+# "-DUSE_SYSTEM_CIVETWEB=OFF". The exact cause for this difference is
+# unknown, but it appears to be related to stack management across
+# shared libraries. We therefore limit the maximum nesting depth to 32
+# levels.
+add_definitions(-DDCMTK_MAX_SEQUENCE_NESTING=32)
