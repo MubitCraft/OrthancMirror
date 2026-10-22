@@ -10,3 +10,34 @@ diff -urEb openssl-3.5.9.orig/crypto/mem_sec.c openssl-3.5.9/crypto/mem_sec.c
      if (syscall(SYS_mlock2, sh.arena, sh.arena_size, MLOCK_ONFAULT) < 0) {
          if (errno == ENOSYS) {
              if (mlock(sh.arena, sh.arena_size) < 0)
+diff -urEb openssl-3.5.9.orig/include/openssl/types.h openssl-3.5.9/include/openssl/types.h
+--- openssl-3.5.9.orig/include/openssl/types.h	2026-10-22 09:47:14.593901564 +0200
++++ openssl-3.5.9/include/openssl/types.h	2026-10-22 11:22:57.228910355 +0200
+@@ -7,6 +7,13 @@
+  * https://www.openssl.org/source/license.html
+  */
+ 
++#ifdef __MINGW32__
++/* This prevents a clash with X509_NAME in /usr/share/mingw-w64/include/wincrypt.h */
++#  include <winsock2.h>
++#  include <windows.h>
++#  include <wincrypt.h>
++#endif
++
+ /*
+  * Unfortunate workaround to avoid symbol conflict with wincrypt.h
+  * See https://github.com/openssl/openssl/issues/9981
+diff -urEb openssl-3.5.9.orig/ssl/rio/rio_notifier.c openssl-3.5.9/ssl/rio/rio_notifier.c
+--- openssl-3.5.9.orig/ssl/rio/rio_notifier.c	2026-10-22 09:47:14.598901511 +0200
++++ openssl-3.5.9/ssl/rio/rio_notifier.c	2026-10-22 11:22:29.869123827 +0200
+@@ -7,6 +7,10 @@
+  * https://www.openssl.org/source/license.html
+  */
+ 
++#ifdef __MINGW32__
++#  include "../crypto/bio/bio_local.h"  /* This defines socklen_t */
++#endif
++
+ #include "internal/sockets.h"
+ #include <openssl/bio.h>
+ #include <openssl/err.h>
