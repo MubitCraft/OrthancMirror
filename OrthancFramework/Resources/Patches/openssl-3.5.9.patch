@@ -37,6 +37,18 @@ diff -urEb openssl-3.5.9.orig/crypto/mem_sec.c openssl-3.5.9/crypto/mem_sec.c
      if (syscall(SYS_mlock2, sh.arena, sh.arena_size, MLOCK_ONFAULT) < 0) {
          if (errno == ENOSYS) {
              if (mlock(sh.arena, sh.arena_size) < 0)
+diff -urEb openssl-3.5.9.orig/crypto/ml_kem/ml_kem.c openssl-3.5.9/crypto/ml_kem/ml_kem.c
+--- openssl-3.5.9.orig/crypto/ml_kem/ml_kem.c	2026-10-22 09:47:14.564901874 +0200
++++ openssl-3.5.9/crypto/ml_kem/ml_kem.c	2026-10-22 13:07:38.748621689 +0200
+@@ -26,7 +26,7 @@
+ #error "Invalid unequal lengths of ML-KEM shared secret and random inputs"
+ #endif
+ 
+-#if UINT_MAX < UINT32_MAX
++#if !defined(_MSC_VER) && (UINT_MAX < UINT32_MAX)
+ #error "Unsupported compiler: sizeof(unsigned int) < sizeof(uint32_t)"
+ #endif
+ 
 diff -urEb openssl-3.5.9.orig/crypto/pkcs7/pk7_doit.c openssl-3.5.9/crypto/pkcs7/pk7_doit.c
 --- openssl-3.5.9.orig/crypto/pkcs7/pk7_doit.c	2026-10-22 09:47:14.567901842 +0200
 +++ openssl-3.5.9/crypto/pkcs7/pk7_doit.c	2026-10-22 12:30:30.882791931 +0200
@@ -81,6 +93,17 @@ diff -urEb openssl-3.5.9.orig/include/openssl/types.h openssl-3.5.9/include/open
  /*
   * Unfortunate workaround to avoid symbol conflict with wincrypt.h
   * See https://github.com/openssl/openssl/issues/9981
+diff -urEb openssl-3.5.9.orig/providers/implementations/signature/mac_legacy_sig.c openssl-3.5.9/providers/implementations/signature/mac_legacy_sig.c
+--- openssl-3.5.9.orig/providers/implementations/signature/mac_legacy_sig.c	2026-10-22 09:47:14.597901521 +0200
++++ openssl-3.5.9/providers/implementations/signature/mac_legacy_sig.c	2026-10-22 13:09:03.601002817 +0200
+@@ -10,7 +10,6 @@
+ /* We need to use some engine deprecated APIs */
+ #define OPENSSL_SUPPRESS_DEPRECATED
+ 
+-#include <stdbool.h>
+ #include <openssl/crypto.h>
+ #include <openssl/evp.h>
+ #include <openssl/core_dispatch.h>
 diff -urEb openssl-3.5.9.orig/ssl/rio/rio_notifier.c openssl-3.5.9/ssl/rio/rio_notifier.c
 --- openssl-3.5.9.orig/ssl/rio/rio_notifier.c	2026-10-22 09:47:14.598901511 +0200
 +++ openssl-3.5.9/ssl/rio/rio_notifier.c	2026-10-22 12:22:04.002093537 +0200
