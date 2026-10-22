@@ -49,7 +49,8 @@ Maintenance
   - "THIRD_PARTY_DOWNLOADS_ROOT_URL" to specify another webserver to downloads the third-parties from.
   - "ORTHANC_SOURCES_DOWNLOADS_ROOT_URL" to specify another webserver to downloads the Orthanc sources from.
 * Upgraded dependencies for static builds:
-  - OpenSSL 3.5.9 (LTS branch)
+  - dcmtk 3.7.1
+  - openssl 3.5.9 (LTS branch)
 
 
 Version 1.13.0 (2026-08-15)
