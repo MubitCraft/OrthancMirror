@@ -168,11 +168,10 @@ TEST(Versions, LibIconvStatic)
 #if ORTHANC_ENABLE_SSL == 1
 TEST(Versions, OpenSslStatic)
 {
-  // openssl-3.1.4
   // https://www.openssl.org/docs/man3.0/man3/OPENSSL_VERSION_NUMBER.html
   ASSERT_EQ(3 /* major */ * 0x10000000L +
-            1 /* minor */ * 0x00100000L +
-            4 /* patch */ * 0x00000010L, OPENSSL_VERSION_NUMBER);
+            5 /* minor */ * 0x00100000L +
+            9 /* patch */ * 0x00000010L, OPENSSL_VERSION_NUMBER);
 }
 #endif
 

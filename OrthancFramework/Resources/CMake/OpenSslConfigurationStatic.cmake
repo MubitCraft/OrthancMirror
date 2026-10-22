@@ -394,8 +394,9 @@ list(REMOVE_ITEM OPENSSL_SOURCES
   ${OPENSSL_SOURCES_DIR}/providers/implementations/macs/blake2_mac_impl.c
   ${OPENSSL_SOURCES_DIR}/ssl/record/methods/ktls_meth.c
 
-  ${OPENSSL_SOURCES_DIR}/engines/e_afalg.c  # Fails on OS X and Visual Studio
   ${OPENSSL_SOURCES_DIR}/crypto/poly1305/poly1305_ieee754.c  # Fails on Visual Studio
+  ${OPENSSL_SOURCES_DIR}/crypto/sha/sha_riscv.c  # Fails on LSB
+  ${OPENSSL_SOURCES_DIR}/engines/e_afalg.c  # Fails on OS X and Visual Studio
 
   # Disable CPUID for non-x86 platforms
   ${OPENSSL_SOURCES_DIR}/crypto/armcap.c
