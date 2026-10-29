@@ -1,0 +1,144 @@
+/**
+ * Orthanc - A Lightweight, RESTful DICOM Store
+ * Copyright (C) 2012-2016 Sebastien Jodogne, Medical Physics
+ * Department, University Hospital of Liege, Belgium
+ * Copyright (C) 2017-2023 Osimis S.A., Belgium
+ * Copyright (C) 2024-2026 Orthanc Team SRL, Belgium
+ * Copyright (C) 2021-2026 Sebastien Jodogne, ICTEAM UCLouvain, Belgium
+ *
+ * This program is free software: you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ **/
+
+
+#pragma once
+
+#include "ServerIndexChange.h"
+#include "JobEvent.h"
+
+#include "../../OrthancFramework/Sources/MultiThreading/SharedMessageQueue.h"
+#include "../../OrthancFramework/Sources/Lua/LuaContext.h"
+
+namespace Orthanc
+{
+  class DicomInstanceToStore;
+  class OutgoingDicomInstance;
+  class ServerContext;
+  class TimeoutDicomConnectionManager;
+
+  class LuaScripting : public boost::noncopyable
+  {
+  private:
+    enum State
+    {
+      State_Setup,
+      State_Running,
+      State_Done
+    };
+
+    class ExecuteEvent;
+    class IEvent;
+    class OnStoredInstanceEvent;
+    class StableResourceEvent;
+    class LuaJobEvent;
+    class DeleteEvent;
+    class UpdateEvent;
+
+    static ServerContext* GetServerContext(lua_State *state);
+
+    static int RestApiPostOrPut(lua_State *state,
+                                bool isPost);
+    static int RestApiGet(lua_State *state);
+    static int RestApiPost(lua_State *state);
+    static int RestApiPut(lua_State *state);
+    static int RestApiDelete(lua_State *state);
+    static int GetOrthancConfiguration(lua_State *state);
+    static int SetStableStatus(lua_State* state);
+
+    static int StoreKeyValue(lua_State* state);
+    static int GetKeyValue(lua_State* state);
+    static int DeleteKeyValue(lua_State* state);
+
+    void InitializeJob();
+
+    void SubmitJob();
+
+    struct PImpl;
+    PImpl *pimpl_;  // To store the heavyweight "LuaJobManager"
+
+    boost::recursive_mutex   mutex_;
+    LuaContext               lua_;
+    ServerContext&           context_;
+    State                    state_;
+    boost::thread            eventThread_;
+    boost::thread            heartBeatThread_;
+    unsigned int             heartBeatPeriod_;
+    SharedMessageQueue       pendingEvents_;
+
+    static void EventThread(LuaScripting* that);
+
+    static void HeartBeatThread(LuaScripting* that);
+
+    void LoadGlobalConfiguration();
+
+  public:
+    class Lock : public boost::noncopyable
+    {
+    private:
+      LuaScripting&                        that_;
+      boost::recursive_mutex::scoped_lock  lock_;
+
+    public:
+      explicit Lock(LuaScripting& that) :
+        that_(that),
+        lock_(that.mutex_)
+      {
+      }
+
+      LuaContext& GetLua()
+      {
+        return that_.lua_;
+      }
+    };
+
+    explicit LuaScripting(ServerContext& context);
+
+    ~LuaScripting();
+
+    void Start();
+
+    void Stop();
+
+    void SignalStoredInstance(const std::string& publicId,
+                              const DicomInstanceToStore& instance,
+                              const Json::Value& simplifiedTags);
+
+    void SignalChange(const ServerIndexChange& change);
+
+    bool FilterIncomingInstance(const DicomInstanceToStore& instance,
+                                const Json::Value& simplifiedTags);
+
+    bool FilterIncomingCStoreInstance(uint16_t& dimseStatus,
+                                      const DicomInstanceToStore& instance,
+                                      const Json::Value& simplified);
+
+    bool FilterOutgoingCStoreInstance(const OutgoingDicomInstance& instance,
+                                      const Json::Value& simplified);
+
+    void Execute(const std::string& command);
+
+    void SignalJobEvent(const JobEvent& event);
+
+    TimeoutDicomConnectionManager& GetDicomConnectionManager();
+  };
+}

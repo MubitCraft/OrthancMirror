@@ -1,0 +1,14 @@
+# Build results
+[Bb]in/
+[Oo]bj/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Sensitive or environment-specific config
+appsettings.Development.json
+

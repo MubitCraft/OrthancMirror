@@ -1,0 +1,33 @@
+# ==========================================
+# Build outputs & generated artifacts
+# ==========================================
+orthanc-build/
+**/bin/
+**/obj/
+**/build/
+**/out/
+
+# ==========================================
+# Visual Studio & IDE local caches
+# ==========================================
+.vs/
+**/.vs/
+.vscode/
+**/.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.sqlite
+
+# ==========================================
+# Orthanc runtime storage & heavy downloads
+# ==========================================
+**/OrthancStorage/
+**/ThirdPartyDownloads/
+**/.hg/
+
+# ==========================================
+# Environment-specific configuration
+# ==========================================
+**/appsettings.Development.json

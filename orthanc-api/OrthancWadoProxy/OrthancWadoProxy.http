@@ -1,0 +1,14 @@
+@OrthancWadoProxy_HostAddress = http://localhost:8080
+
+GET {{OrthancWadoProxy_HostAddress}}/api/health
+Accept: application/json
+
+###
+
+GET {{OrthancWadoProxy_HostAddress}}/api/studies
+Accept: application/json
+
+###
+
+GET {{OrthancWadoProxy_HostAddress}}/api/studies/{{studyId}}
+Accept: application/json

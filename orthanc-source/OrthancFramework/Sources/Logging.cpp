@@ -1,0 +1,1613 @@
+/**
+ * Orthanc - A Lightweight, RESTful DICOM Store
+ * Copyright (C) 2012-2016 Sebastien Jodogne, Medical Physics
+ * Department, University Hospital of Liege, Belgium
+ * Copyright (C) 2017-2023 Osimis S.A., Belgium
+ * Copyright (C) 2024-2026 Orthanc Team SRL, Belgium
+ * Copyright (C) 2021-2026 Sebastien Jodogne, ICTEAM UCLouvain, Belgium
+ *
+ * This program is free software: you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public License
+ * as published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this program. If not, see
+ * <http://www.gnu.org/licenses/>.
+ **/
+
+
+#include "PrecompiledHeaders.h"
+#include "Logging.h"
+
+#include "OrthancException.h"
+
+#include <cassert>
+#include <stdint.h>
+#include <string.h>
+
+#if defined(__linux__) && !defined(NDEBUG)
+#  include <pthread.h>
+#endif
+
+
+/*********************************************************
+ * Common section
+ *********************************************************/
+
+//  NOLINTBEGIN(bugprone-reserved-identifier) // for all identifiers starting with _Orthanc
+
+namespace Orthanc
+{
+  namespace Logging
+  {
+    static const uint32_t ALL_CATEGORIES_MASK = 0xffffffff;
+
+    static uint32_t infoCategoriesMask_ = 0;
+    static uint32_t traceCategoriesMask_ = 0;
+    static std::string logTargetFolder_;            // keep a track of the log folder in case of reset of the context
+    static std::string logTargetFile_;              // keep a track of the log file in case of reset of the context
+
+    const char* EnumerationToString(LogLevel level)
+    {
+      switch (level)
+      {
+        case LogLevel_ERROR:
+          return "ERROR";
+
+        case LogLevel_WARNING:
+          return "WARNING";
+
+        case LogLevel_INFO:
+          return "INFO";
+
+        case LogLevel_TRACE:
+          return "TRACE";
+
+        default:
+          throw OrthancException(ErrorCode_ParameterOutOfRange);
+      }
+    }
+
+
+    LogLevel StringToLogLevel(const char *level)
+    {
+      if (strcmp(level, "ERROR") == 0)
+      {
+        return LogLevel_ERROR;
+      }
+      else if (strcmp(level, "WARNING") == 0)
+      {
+        return LogLevel_WARNING;
+      }
+      else if (strcmp(level, "INFO") == 0)
+      {
+        return LogLevel_INFO;
+      }
+      else if (strcmp(level, "TRACE") == 0)
+      {
+        return LogLevel_TRACE;
+      }
+      else
+      {
+        THROW_WITH_FILE_AND_LINE_INFO(ErrorCode_InternalError);
+      }
+    }
+
+
+    void EnableInfoLevel(bool enabled)
+    {
+      if (enabled)
+      {
+        infoCategoriesMask_ = ALL_CATEGORIES_MASK;
+      }
+      else
+      {
+        // Also disable the "TRACE" level when info-level debugging is disabled
+        infoCategoriesMask_ = 0;
+        traceCategoriesMask_ = 0;
+      }
+    }
+
+
+    bool IsInfoLevelEnabled()
+    {
+      return (infoCategoriesMask_ != 0);
+    }
+
+
+    void EnableTraceLevel(bool enabled)
+    {
+      if (enabled)
+      {
+        // Also enable the "INFO" level when trace-level debugging is enabled
+        infoCategoriesMask_ = ALL_CATEGORIES_MASK;
+        traceCategoriesMask_ = ALL_CATEGORIES_MASK;
+      }
+      else
+      {
+        traceCategoriesMask_ = 0;
+      }
+    }
+
+
+    bool IsTraceLevelEnabled()
+    {
+      return (traceCategoriesMask_ != 0);
+    }
+
+
+    void SetCategoryEnabled(LogLevel level,
+                            LogCategory category,
+                            bool enabled)
+    {
+      // Invariant: If a bit is set for "trace", it must also be set
+      // for "verbose" (in other words, trace level implies verbose level)
+      assert((traceCategoriesMask_ & infoCategoriesMask_) == traceCategoriesMask_);
+
+      if (level == LogLevel_INFO)
+      {
+        if (enabled)
+        {
+          infoCategoriesMask_ |= static_cast<uint32_t>(category);
+        }
+        else
+        {
+          infoCategoriesMask_ &= ~static_cast<uint32_t>(category);
+          traceCategoriesMask_ &= ~static_cast<uint32_t>(category);
+        }
+      }
+      else if (level == LogLevel_TRACE)
+      {
+        if (enabled)
+        {
+          traceCategoriesMask_ |= static_cast<uint32_t>(category);
+          infoCategoriesMask_ |= static_cast<uint32_t>(category);
+        }
+        else
+        {
+          traceCategoriesMask_ &= ~static_cast<uint32_t>(category);
+        }
+      }
+      else
+      {
+        throw OrthancException(ErrorCode_ParameterOutOfRange,
+                               "Can only modify the parameters of the INFO and TRACE levels");
+      }
+
+      assert((traceCategoriesMask_ & infoCategoriesMask_) == traceCategoriesMask_);
+    }
+
+
+    bool IsCategoryEnabled(LogLevel level,
+                           LogCategory category)
+    {
+      if (level == LogLevel_ERROR ||
+          level == LogLevel_WARNING)
+      {
+        return true;
+      }
+      else if (level == LogLevel_INFO)
+      {
+        return (infoCategoriesMask_ & category) != 0;
+      }
+      else if (level == LogLevel_TRACE)
+      {
+        return (traceCategoriesMask_ & category) != 0;
+      }
+      else
+      {
+        return false;
+      }
+    }
+
+
+    bool LookupCategory(LogCategory& target,
+                        const std::string& category)
+    {
+      if (category == "generic")
+      {
+        target = LogCategory_GENERIC;
+        return true;
+      }
+      else if (category == "plugins")
+      {
+        target = LogCategory_PLUGINS;
+        return true;
+      }
+      else if (category == "http")
+      {
+        target = LogCategory_HTTP;
+        return true;
+      }
+      else if (category == "dicom")
+      {
+        target = LogCategory_DICOM;
+        return true;
+      }
+      else if (category == "sqlite")
+      {
+        target = LogCategory_SQLITE;
+        return true;
+      }
+      else if (category == "jobs")
+      {
+        target = LogCategory_JOBS;
+        return true;
+      }
+      else if (category == "lua")
+      {
+        target = LogCategory_LUA;
+        return true;
+      }
+      else
+      {
+        return false;
+      }
+    }
+
+
+    unsigned int GetCategoriesCount()
+    {
+      return 7;
+    }
+
+
+    const char* GetCategoryName(unsigned int i)
+    {
+      if (i < GetCategoriesCount())
+      {
+        return GetCategoryName(static_cast<LogCategory>(1 << i));
+      }
+      else
+      {
+        throw OrthancException(ErrorCode_ParameterOutOfRange);
+      }
+    }
+
+
+    const char* GetCategoryName(LogCategory category)
+    {
+      switch (category)
+      {
+        case LogCategory_GENERIC:
+          return "generic";
+
+        case LogCategory_PLUGINS:
+          return "plugins";
+
+        case LogCategory_HTTP:
+          return "http";
+
+        case LogCategory_DICOM:
+          return "dicom";
+
+        case LogCategory_SQLITE:
+          return "sqlite";
+
+        case LogCategory_JOBS:
+          return "jobs";
+
+        case LogCategory_LUA:
+          return "lua";
+
+        default:
+          throw OrthancException(ErrorCode_ParameterOutOfRange);
+      }
+    }
+  }
+}
+
+
+
+#if ORTHANC_ENABLE_LOGGING != 1
+
+/*********************************************************
+ * Section if logging is disabled
+ *********************************************************/
+
+namespace Orthanc
+{
+  namespace Logging
+  {
+    void InitializePluginContext(void* pluginContext)
+    {
+    }
+
+    void InitializePluginContext(void* pluginContext, const char* pluginName)
+    {
+    }
+
+    void Initialize()
+    {
+    }
+
+    void Finalize()
+    {
+    }
+
+    void Reset()
+    {
+    }
+
+    void Flush()
+    {
+    }
+
+    void SetTargetFile(const std::string& path)
+    {
+    }
+
+    void SetTargetFolder(const std::string& path)
+    {
+    }
+  }
+}
+
+
+#elif ORTHANC_ENABLE_LOGGING_STDIO == 1
+
+/*********************************************************
+ * Logger compatible with <stdio.h> OR logger that sends its
+ * output to the emscripten html5 api (depending on the
+ * definition of __EMSCRIPTEN__)
+ *********************************************************/
+
+#include <stdio.h>
+
+#ifdef __EMSCRIPTEN__
+#  include <emscripten/html5.h>
+#endif
+
+namespace Orthanc
+{
+  namespace Logging
+  {
+#ifdef __EMSCRIPTEN__
+    static void ErrorLogFunc(const char* msg)
+    {
+      emscripten_console_error(msg);
+    }
+
+    static void WarningLogFunc(const char* msg)
+    {
+      emscripten_console_warn(msg);
+    }
+
+    static void InfoLogFunc(const char* msg)
+    {
+      emscripten_console_log(msg);
+    }
+
+    static void TraceLogFunc(const char* msg)
+    {
+      emscripten_console_log(msg);
+    }
+#else  /* __EMSCRIPTEN__ not #defined */
+    static void ErrorLogFunc(const char* msg)
+    {
+      fprintf(stderr, "E: %s\n", msg);
+    }
+
+    static void WarningLogFunc(const char*)
+    {
+      fprintf(stdout, "W: %s\n", msg);
+    }
+
+    static void InfoLogFunc(const char*)
+    {
+      fprintf(stdout, "I: %s\n", msg);
+    }
+
+    static void TraceLogFunc(const char*)
+    {
+      fprintf(stdout, "T: %s\n", msg);
+    }
+#endif  /* __EMSCRIPTEN__ */
+
+
+    InternalLogger::~InternalLogger()
+    {
+      std::string message = messageStream_.str();
+
+      if (IsCategoryEnabled(level_, category_))
+      {
+        switch (level_)
+        {
+          case LogLevel_ERROR:
+            ErrorLogFunc(message.c_str());
+            break;
+
+          case LogLevel_WARNING:
+            WarningLogFunc(message.c_str());
+            break;
+
+          case LogLevel_INFO:
+            InfoLogFunc(message.c_str());
+            // TODO: stone_console_info(message_.c_str());
+            break;
+
+          case LogLevel_TRACE:
+            TraceLogFunc(message.c_str());
+            break;
+
+          default:
+          {
+            std::stringstream ss;
+            ss << "Unknown log level (" << level_ << ") for message: " << message;
+            std::string s = ss.str();
+            ErrorLogFunc(s.c_str());
+          }
+        }
+      }
+    }
+
+    void InitializePluginContext(void* pluginContext)
+    {
+    }
+
+    void InitializePluginContext(void* pluginContext, const char* pluginName)
+    {
+    }
+
+    void Initialize()
+    {
+    }
+
+    void Finalize()
+    {
+    }
+
+    void Reset()
+    {
+    }
+
+    void Flush()
+    {
+    }
+
+    void SetTargetFile(const std::string& path)
+    {
+    }
+
+    void SetTargetFolder(const std::string& path)
+    {
+    }
+  }
+}
+
+
+#else
+
+/*********************************************************
+ * Logger compatible with the Orthanc plugin SDK, or that
+ * mimics behavior from Google Log.
+ *********************************************************/
+
+#include <boost/thread/thread.hpp>
+#include <cassert>
+
+namespace
+{
+  /**
+   * This is minimal implementation of the context for an Orthanc
+   * plugin, limited to the logging facilities, and that is binary
+   * compatible with the definitions of "OrthancCPlugin.h"
+   **/
+  typedef enum
+  {
+    _OrthancPluginService_LogInfo = 1,
+    _OrthancPluginService_LogWarning = 2,
+    _OrthancPluginService_LogError = 3,
+    _OrthancPluginService_SetCurrentThreadName = 44,
+    _OrthancPluginService_LogMessage = 45,
+    _OrthancPluginService_ClearCurrentThreadName = 64,
+    _OrthancPluginService_INTERNAL = 0x7fffffff
+  } _OrthancPluginService;
+
+  typedef struct _OrthancPluginContext_t
+  {
+    void*          pluginsManager;
+    const char*    orthancVersion;
+    void         (*Free) (void* buffer);
+    int32_t      (*InvokeService) (struct _OrthancPluginContext_t* context,
+                                   _OrthancPluginService service,
+                                   const void* params);
+  } OrthancPluginContext;
+
+  typedef struct
+  {
+    const char*               message;
+    const char*               plugin;
+    const char*               file;
+    uint32_t                  line;
+    uint32_t                  category;  // can be a LogCategory or a OrthancPluginLogCategory
+    uint32_t                  level;     // can be a LogLevel or a OrthancPluginLogLevel
+  } _OrthancPluginLogMessage;
+
+}
+
+
+#include "Enumerations.h"
+#include "SystemToolbox.h"
+#include "Toolbox.h"
+
+#include <boost/algorithm/string/join.hpp>
+#include <boost/date_time/posix_time/posix_time.hpp>
+#include <boost/filesystem.hpp>
+#include <boost/thread.hpp>
+#include <fstream>
+#include <list>
+
+
+namespace
+{
+  class LoggingStreamsContext : public boost::noncopyable
+  {
+  private:
+    std::ostream* error_;
+    std::ostream* warning_;
+    std::ostream* info_;
+
+    std::unique_ptr<std::ofstream> file_;
+
+  public:
+    LoggingStreamsContext() :
+      error_(&std::cerr),
+      warning_(&std::cerr),
+      info_(&std::cerr)
+    {
+    }
+
+    LoggingStreamsContext(std::ostream& errorStream,
+                          std::ostream& warningStream,
+                          std::ostream& infoStream) :
+      error_(&errorStream),
+      warning_(&warningStream),
+      info_(&infoStream)
+    {
+    }
+
+    void SetOutputFile(std::ofstream* target)
+    {
+      std::unique_ptr<std::ofstream> protection(target);
+
+      if (target == NULL)
+      {
+        throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
+      }
+      else if (!protection->is_open())
+      {
+        throw Orthanc::OrthancException(Orthanc::ErrorCode_CannotWriteFile);
+      }
+      else
+      {
+        file_.reset(protection.release());
+        warning_ = target;
+        error_ = target;
+        info_ = target;
+      }
+    }
+
+    std::ostream& GetError() const
+    {
+      assert(error_ != NULL);
+      return *error_;
+    }
+
+    std::ostream& GetWarning() const
+    {
+      assert(warning_ != NULL);
+      return *warning_;
+    }
+
+    std::ostream& GetInfo() const
+    {
+      assert(info_ != NULL);
+      return *info_;
+    }
+
+    void Flush()
+    {
+      GetError().flush();
+      GetWarning().flush();
+      GetInfo().flush();
+    }
+  };
+}
+
+
+static const size_t THREAD_NAME_MAX_SIZE = 16;   // Thread names are limited to 16 char + a space
+
+
+static std::string FormatThreadName(const std::string& name)
+{
+  if (name.size() < THREAD_NAME_MAX_SIZE)
+  {
+    return std::string(THREAD_NAME_MAX_SIZE - name.size(), ' ') + name;
+  }
+  else if (name.size() == THREAD_NAME_MAX_SIZE)
+  {
+    return name;
+  }
+  else
+  {
+    return name.substr(THREAD_NAME_MAX_SIZE);
+  }
+}
+
+
+namespace
+{
+  class ThreadInformation : public boost::noncopyable
+  {
+  private:
+    bool                    hasName_;
+    std::string             name_;
+    std::list<std::string>  context_;
+
+  public:
+    ThreadInformation() :
+      hasName_(false)
+    {
+    }
+
+    void SetThreadName(const std::string& name)
+    {
+#if !defined(NDEBUG)
+      if (hasName_)
+      {
+        std::cerr << "This thread already has a name or another thread is re-using "
+                  << "the same threadId and you have not called \"ClearCurrentThreadName()\": " << name << std::endl;
+        assert(0);
+      }
+#endif
+
+      hasName_ = true;
+      name_ = FormatThreadName(name);
+
+      assert(name_.size() == THREAD_NAME_MAX_SIZE);
+    }
+
+    void ClearThreadName()
+    {
+      hasName_ = false;
+      name_.clear();
+    }
+
+    bool HasThreadName() const
+    {
+      return hasName_;
+    }
+
+    std::string GetThreadName() const
+    {
+      if (hasName_)
+      {
+        return name_;
+      }
+      else
+      {
+        throw Orthanc::OrthancException(Orthanc::ErrorCode_BadSequenceOfCalls);
+      }
+    }
+
+    void PopContext()
+    {
+      if (context_.empty())
+      {
+#if !defined(NDEBUG)
+        std::cerr << "Cannot pop from an empty context" << std::endl;
+        assert(0);
+#endif
+      }
+      else
+      {
+        context_.pop_back();
+      }
+    }
+
+    void PushContext(const std::string& message)
+    {
+      context_.push_back(message);
+    }
+
+    const std::list<std::string>& GetContext() const
+    {
+      return context_;
+    }
+  };
+
+
+  class ThreadsInformations : public boost::noncopyable
+  {
+  private:
+    typedef std::map<boost::thread::id, ThreadInformation*>  Content;
+
+    boost::shared_mutex  mutex_;
+    Content              content_;
+
+  public:
+    ~ThreadsInformations()
+    {
+      Clear();
+    }
+
+    void Clear()
+    {
+      boost::unique_lock<boost::shared_mutex>  lock(mutex_);
+
+      for (Content::iterator it = content_.begin(); it != content_.end(); ++it)
+      {
+        assert(it->second != NULL);
+        delete it->second;
+      }
+
+      content_.clear();
+    }
+
+
+    class CurrentThreadReader : public boost::noncopyable
+    {
+    private:
+      boost::shared_lock<boost::shared_mutex>  lock_;
+      boost::thread::id                        threadId_;
+      bool                                     exists_;
+      const ThreadInformation*                 information_;
+
+    public:
+      explicit CurrentThreadReader(ThreadsInformations& informations) :
+        lock_(informations.mutex_),
+        threadId_(boost::this_thread::get_id()),
+        exists_(false),
+        information_(NULL)
+      {
+        Content::const_iterator found = informations.content_.find(threadId_);
+
+        if (found != informations.content_.end())
+        {
+          assert(found->second != NULL);
+
+          exists_ = true;
+          information_ = found->second;
+        }
+      }
+
+      std::string GetThreadName() const
+      {
+        assert(!exists_ || information_ != NULL);
+
+        if (exists_ &&
+            information_->HasThreadName())
+        {
+          return information_->GetThreadName();
+        }
+        else
+        {
+          return FormatThreadName(boost::lexical_cast<std::string>(threadId_));
+        }
+      }
+
+      bool HasThreadName() const
+      {
+        assert(!exists_ || information_ != NULL);
+        return (exists_ &&
+                information_->HasThreadName());
+      }
+
+      void FormatContext(std::string& context) const
+      {
+        assert(!exists_ || information_ != NULL);
+        if (exists_ &&
+            !information_->GetContext().empty())
+        {
+          context = "| " + boost::algorithm::join(information_->GetContext(), std::string(" | ")) + " | ";
+        }
+      }
+
+      void CopyContext(std::list<std::string>& target) const
+      {
+        if (exists_)
+        {
+          assert(information_ != NULL);
+          target = information_->GetContext();
+        }
+        else
+        {
+          target.clear();
+        }
+      }
+    };
+
+
+    class CurrentThreadWriter : public boost::noncopyable
+    {
+    private:
+      ThreadsInformations&                     informations_;
+      boost::unique_lock<boost::shared_mutex>  lock_;
+      boost::thread::id                        threadId_;
+      ThreadInformation*                       information_;
+      bool                                     valid_;
+
+      void Recycle()
+      {
+        if (!information_->HasThreadName() &&
+            information_->GetContext().empty())
+        {
+          Content::iterator found = informations_.content_.find(threadId_);
+          assert(found != informations_.content_.end());
+          assert(found->second != NULL);
+
+          delete found->second;
+          informations_.content_.erase(found);
+
+          valid_ = false;
+        }
+      }
+
+    public:
+      explicit CurrentThreadWriter(ThreadsInformations& informations) :
+        informations_(informations),
+        lock_(informations.mutex_),
+        threadId_(boost::this_thread::get_id()),
+        valid_(true)
+      {
+        Content::iterator found = informations.content_.find(threadId_);
+
+        if (found == informations.content_.end())
+        {
+          information_ = new ThreadInformation;
+          informations.content_[threadId_] = information_;
+        }
+        else
+        {
+          assert(found->second != NULL);
+          information_ = found->second;
+        }
+      }
+
+      void SetThreadName(const std::string& name)
+      {
+        if (!valid_)
+        {
+          throw Orthanc::OrthancException(Orthanc::ErrorCode_BadSequenceOfCalls);
+        }
+
+        assert(information_ != NULL);
+        information_->SetThreadName(name);
+
+#if !defined(NDEBUG)
+        const std::string formattedName = information_->GetThreadName();
+
+        for (Content::const_iterator it = informations_.content_.begin(); it != informations_.content_.end(); ++it)
+        {
+          assert(it->second != NULL);
+          if (it->first != threadId_ &&
+              it->second->HasThreadName() &&
+              it->second->GetThreadName() == formattedName)
+          {
+            std::cerr << "Another thread already uses this thread name: " << name << std::endl;
+            assert(0);
+          }
+        }
+#endif
+      }
+
+      void PushContext(const std::string& context)
+      {
+        if (!valid_)
+        {
+          throw Orthanc::OrthancException(Orthanc::ErrorCode_BadSequenceOfCalls);
+        }
+
+        assert(information_ != NULL);
+        information_->PushContext(context);
+      }
+
+      void ClearThreadName()
+      {
+        if (!valid_)
+        {
+          throw Orthanc::OrthancException(Orthanc::ErrorCode_BadSequenceOfCalls);
+        }
+
+        assert(information_ != NULL);
+        information_->ClearThreadName();
+
+        Recycle();
+      }
+
+      void PopContext()
+      {
+        if (!valid_)
+        {
+          throw Orthanc::OrthancException(Orthanc::ErrorCode_BadSequenceOfCalls);
+        }
+
+        assert(information_ != NULL);
+        information_->PopContext();
+
+        Recycle();
+      }
+    };
+  };
+}
+
+
+static std::unique_ptr<LoggingStreamsContext>   loggingStreamsContext_;
+static boost::mutex                             loggingStreamsMutex_;
+static Orthanc::Logging::NullStream             nullStream_;
+static OrthancPluginContext*                    pluginContext_ = NULL;    // this is != NULL only when running from a plugin
+static std::string                              pluginName_;              // this string can only be non-empty if running from a plugin
+static bool                                     hasOrthancAdvancedLogging_ = false;  // Whether the Orthanc runtime is >= 1.12.4
+static bool                                     hasClearThreadName_ = false;  // Whether the Orthanc runtime is >= 1.13.0
+static ThreadsInformations                      threadsInformations_;
+static bool                                     enableThreadNames_ = true;
+static bool                                     enableThreadContexts_ = true;
+static bool                                     logCallerThreadNameInContext_ = false; // add a "from THREADNAME" in the context everytime the context is copied from a thread to the other to help track the runnable/callable journey
+static std::list<Orthanc::Logging::ILoggingListener*> loggingListeners_;
+static boost::shared_mutex                            loggingListenersMutex_;
+
+
+namespace Orthanc
+{
+  namespace Logging
+  {
+    void SetThreadNamesEnabled(bool enabled)
+    {
+      enableThreadNames_ = enabled;
+    }
+
+    void SetThreadContextsEnabled(bool enabled)
+    {
+      enableThreadContexts_ = enabled;
+    }
+
+    void SetThreadNamesInContextsEnabled(bool enabled)
+    {
+      logCallerThreadNameInContext_ = enabled;
+    }
+
+    static void GetLogPath(boost::filesystem::path& log,
+                           boost::filesystem::path& link,
+                           const std::string& suffix,
+                           const std::string& directory)
+    {
+      /**
+         From Google Log documentation:
+
+         Unless otherwise specified, logs will be written to the filename
+         "<program name>.<hostname>.<user name>.log<suffix>.",
+         followed by the date, time, and pid (you can't prevent the date,
+         time, and pid from being in the filename).
+
+         In this implementation : "hostname" and "username" are not used
+      **/
+
+      boost::posix_time::ptime now = boost::posix_time::second_clock::local_time();
+      boost::filesystem::path root(SystemToolbox::PathFromUtf8(directory));
+      boost::filesystem::path exe(SystemToolbox::GetPathToExecutable());
+
+      if (!boost::filesystem::exists(root) ||
+          !boost::filesystem::is_directory(root))
+      {
+        throw OrthancException(ErrorCode_CannotWriteFile);
+      }
+
+      char date[64];
+      sprintf(date, "%04d%02d%02d-%02d%02d%02d.%d",
+              static_cast<int>(now.date().year()),
+              now.date().month().as_number(),
+              now.date().day().as_number(),
+              static_cast<int>(now.time_of_day().hours()),
+              static_cast<int>(now.time_of_day().minutes()),
+              static_cast<int>(now.time_of_day().seconds()),
+              SystemToolbox::GetProcessId());
+
+      std::string programName = exe.filename().replace_extension("").string();
+
+      log = (root / (programName + ".log" + suffix + "." + std::string(date)));
+      link = (root / (programName + ".log" + suffix));
+    }
+
+
+    static std::ofstream* PrepareLogFolder(const std::string& suffix,
+                                           const std::string& directory)
+    {
+      boost::filesystem::path log, link;
+      GetLogPath(log, link, suffix, directory);
+
+#if !defined(_WIN32) && (defined(__unix__) || defined(__unix) || (defined(__APPLE__) && defined(__MACH__)))
+      boost::filesystem::remove(link);
+      boost::filesystem::create_symlink(log.filename(), link);
+#endif
+
+      return new std::ofstream(log.string().c_str());
+    }
+
+
+    void SetCurrentThreadName(const std::string& name)
+    {
+      if (name.size() > THREAD_NAME_MAX_SIZE)
+      {
+        throw OrthancException(ErrorCode_InternalError, "Thread name can not exceed " +
+                               boost::lexical_cast<std::string>(THREAD_NAME_MAX_SIZE) + ": " + name);
+      }
+
+      if (pluginContext_ == NULL)
+      {
+        {
+          ThreadsInformations::CurrentThreadWriter writer(threadsInformations_);
+          writer.SetThreadName(name);
+        }
+
+#if defined(__linux__) && !defined(NDEBUG) && !defined(__LSB_VERSION__)
+        // set the thread name at "system" level too -> required to have the thread names visible in GDB !
+        pthread_setname_np(pthread_self(), name.substr(0, 15).c_str());  // thread names are limited to 15 in Linux
+#endif
+      }
+      else
+      {
+        pluginContext_->InvokeService(pluginContext_, _OrthancPluginService_SetCurrentThreadName, name.c_str());
+      }
+    }
+
+
+    bool HasCurrentThreadName()
+    {
+      if (pluginContext_ == NULL)
+      {
+        ThreadsInformations::CurrentThreadReader reader(threadsInformations_);
+        return reader.HasThreadName();
+      }
+      else
+      {
+        throw OrthancException(ErrorCode_NotImplemented);  // Not available for plugins
+      }
+    }
+
+
+    void ClearCurrentThreadName()
+    {
+      if (pluginContext_ == NULL)
+      {
+        ThreadsInformations::CurrentThreadWriter writer(threadsInformations_);
+        writer.ClearThreadName();
+      }
+      else if (hasClearThreadName_) // only recent runtimes support it (from 1.13.0)
+      {
+        pluginContext_->InvokeService(pluginContext_, _OrthancPluginService_ClearCurrentThreadName, NULL);
+      }
+    }
+
+
+    std::string GetCurrentThreadName()
+    {
+      if (pluginContext_ == NULL)
+      {
+        ThreadsInformations::CurrentThreadReader reader(threadsInformations_);
+        return reader.GetThreadName();
+      }
+      else
+      {
+        throw OrthancException(ErrorCode_NotImplemented);  // Not available for plugins
+      }
+    }
+
+
+    static void PushCurrentThreadContext(const std::string& context)
+    {
+      if (context.empty())
+      {
+        throw OrthancException(ErrorCode_ParameterOutOfRange);
+      }
+      else
+      {
+        ThreadsInformations::CurrentThreadWriter writer(threadsInformations_);
+        writer.PushContext(context);
+      }
+    }
+
+
+    static void PopCurrentThreadContext()
+    {
+      ThreadsInformations::CurrentThreadWriter writer(threadsInformations_);
+      writer.PopContext();
+    }
+
+
+    struct ThreadContextMemento::PImpl : public boost::noncopyable
+    {
+      std::list<std::string>  context_;
+      std::string             threadName_;
+    };
+
+
+    ThreadContextMemento::ScopedSetter::ScopedSetter(const ThreadContextMemento& memento) :
+      count_(0)
+    {
+      if (logCallerThreadNameInContext_ && enableThreadNames_ && !memento.pimpl_->threadName_.empty())
+      {
+        PushCurrentThreadContext("from " + memento.pimpl_->threadName_);
+        count_++;
+      }
+
+      for (std::list<std::string>::const_iterator it = memento.pimpl_->context_.begin(); it != memento.pimpl_->context_.end(); ++it)
+      {
+        PushCurrentThreadContext(*it);
+        count_++;
+      }
+    }
+
+
+    ThreadContextMemento::ScopedSetter::~ScopedSetter()
+    {
+      for (size_t i = 0; i < count_; i++)
+      {
+        PopCurrentThreadContext();
+      }
+    }
+
+
+    ThreadContextMemento::ThreadContextMemento() :
+      pimpl_(new PImpl)
+    {
+      ThreadsInformations::CurrentThreadReader reader(threadsInformations_);
+      reader.CopyContext(pimpl_->context_);
+      if (reader.HasThreadName())
+      {
+        pimpl_->threadName_ = reader.GetThreadName();
+      }
+    }
+
+
+    ThreadContextMemento::~ThreadContextMemento()
+    {
+      assert(pimpl_ != NULL);
+      delete pimpl_;
+    }
+
+
+    ThreadContextMemento* CreateCurrentThreadContextMemento()
+    {
+      return new ThreadContextMemento;
+    }
+
+
+    void AddLoggingListener(ILoggingListener* listener)
+    {
+      boost::unique_lock<boost::shared_mutex> lock(loggingListenersMutex_);
+      loggingListeners_.push_back(listener);
+    }
+
+
+    void ClearLoggingListeners()
+    {
+      boost::unique_lock<boost::shared_mutex> lock(loggingListenersMutex_);
+      loggingListeners_.clear();
+    }
+
+
+    static void GetLinePrefix(std::string& prefix,
+                              LogLevel level,
+                              const char* pluginName,  // when logging in the core but coming from a plugin, pluginName_ is NULL but this argument is != NULL
+                              const char* file,
+                              int line,
+                              LogCategory category)
+    {
+      boost::filesystem::path path(file);
+      boost::posix_time::ptime now = boost::posix_time::microsec_clock::local_time();
+      boost::posix_time::time_duration duration = now.time_of_day();
+
+      /**
+         From Google Log documentation:
+
+         "Log lines have this form:
+
+         Lmmdd hh:mm:ss.uuuuuu threadid file:line] msg...
+
+         where the fields are defined as follows:
+
+         L                A single character, representing the log level (eg 'I' for INFO)
+         mm               The month (zero padded; ie May is '05')
+         dd               The day (zero padded)
+         hh:mm:ss.uuuuuu  Time in hours, minutes and fractional seconds
+         threadid         The space-padded thread ID as returned by GetTID() (this matches the PID on Linux)
+         file             The file name
+         line             The line number
+         msg              The user-supplied message"
+
+         In this implementation, "threadid" is not printed.
+      **/
+
+      char c;
+      switch (level)
+      {
+        case LogLevel_ERROR:
+          c = 'E';
+          break;
+
+        case LogLevel_WARNING:
+          c = 'W';
+          break;
+
+        case LogLevel_INFO:
+          c = 'I';
+          break;
+
+        case LogLevel_TRACE:
+          c = 'T';
+          break;
+
+        default:
+          c = '?';
+          break;
+      }
+
+      char date[64];
+      sprintf(date, "%c%02d%02d %02d:%02d:%02d.%06d ",
+              c,
+              now.date().month().as_number(),
+              now.date().day().as_number(),
+              static_cast<int>(duration.hours()),
+              static_cast<int>(duration.minutes()),
+              static_cast<int>(duration.seconds()),
+              static_cast<int>(duration.fractional_seconds()));
+
+      std::string threadName;
+      std::string context;
+
+      if (enableThreadNames_ ||
+          enableThreadContexts_)
+      {
+        ThreadsInformations::CurrentThreadReader reader(threadsInformations_);
+
+        if (enableThreadNames_)
+        {
+          threadName = reader.GetThreadName() + " ";
+        }
+
+        if (enableThreadContexts_)
+        {
+          reader.FormatContext(context);
+        }
+      }
+
+      std::string internalPluginName = "";
+      if (pluginName != NULL)
+      {
+        internalPluginName = std::string(pluginName) + ":/";
+      }
+
+      prefix = (std::string(date) + threadName + internalPluginName + path.filename().string() + ":" +
+                boost::lexical_cast<std::string>(line) + "] " + context);
+
+      if (level != LogLevel_ERROR &&
+          level != LogLevel_WARNING &&
+          category != LogCategory_GENERIC)
+      {
+        prefix += "(" + std::string(GetCategoryName(category)) + ") ";
+      }
+    }
+
+
+    void InitializePluginContext(void* pluginContext)
+    {
+      assert(sizeof(_OrthancPluginService) == sizeof(int32_t));
+
+      if (pluginContext == NULL)
+      {
+        throw OrthancException(ErrorCode_NullPointer);
+      }
+
+      boost::mutex::scoped_lock lock(loggingStreamsMutex_);
+      loggingStreamsContext_.reset(NULL);
+      pluginContext_ = reinterpret_cast<OrthancPluginContext*>(pluginContext);
+
+      // The value "hasOrthancAdvancedLogging_" is cached to avoid computing it on every logged message
+      hasOrthancAdvancedLogging_ = Toolbox::IsVersionAbove(pluginContext_->orthancVersion, 1, 12, 4);
+      hasClearThreadName_ = Toolbox::IsVersionAbove(pluginContext_->orthancVersion, 1, 13, 0);
+
+      EnableInfoLevel(true);  // allow the plugin to log at info level (but the Orthanc Core still decides of the level)
+    }
+
+
+    void InitializePluginContext(void* pluginContext, const std::string& pluginName)
+    {
+      InitializePluginContext(pluginContext);
+      pluginName_ = pluginName;
+    }
+
+
+    void Initialize()
+    {
+      boost::mutex::scoped_lock lock(loggingStreamsMutex_);
+
+      if (loggingStreamsContext_.get() == NULL)
+      {
+        loggingStreamsContext_.reset(new LoggingStreamsContext);
+      }
+    }
+
+
+    void Finalize()
+    {
+      boost::mutex::scoped_lock lock(loggingStreamsMutex_);
+      loggingStreamsContext_.reset(NULL);
+    }
+
+
+    void Reset()
+    {
+      {
+        boost::mutex::scoped_lock lock(loggingStreamsMutex_);
+        loggingStreamsContext_.reset(new LoggingStreamsContext);
+      }
+
+      // Recover the old logging context if any
+      if (!logTargetFile_.empty())
+      {
+        SetTargetFile(logTargetFile_);
+      }
+      else if (!logTargetFolder_.empty())
+      {
+        SetTargetFolder(logTargetFolder_);
+      }
+    }
+
+
+    void SetTargetFolder(const std::string& path)
+    {
+      boost::mutex::scoped_lock lock(loggingStreamsMutex_);
+
+      if (loggingStreamsContext_.get() != NULL)
+      {
+        loggingStreamsContext_->SetOutputFile(PrepareLogFolder("" /* no suffix */, path));
+        logTargetFile_.clear();
+        logTargetFolder_ = path;
+      }
+    }
+
+
+    void SetTargetFile(const std::string& path)
+    {
+      boost::mutex::scoped_lock lock(loggingStreamsMutex_);
+
+      if (loggingStreamsContext_.get() != NULL)
+      {
+        loggingStreamsContext_->SetOutputFile(new std::ofstream(path.c_str(), std::fstream::app));
+        logTargetFile_ = path;
+        logTargetFolder_.clear();
+      }
+    }
+
+
+    ScopedCurrentThreadContextSetter::ScopedCurrentThreadContextSetter(const std::string& context)
+    {
+      PushCurrentThreadContext(context);
+    }
+
+
+    ScopedCurrentThreadContextSetter::~ScopedCurrentThreadContextSetter()
+    {
+      PopCurrentThreadContext();
+    }
+
+
+    struct InternalLogger::PImpl
+    {
+      boost::mutex::scoped_lock  lock_;
+
+      PImpl() : lock_(loggingStreamsMutex_, boost::defer_lock_t())
+      {
+      }
+    };
+
+
+    InternalLogger::InternalLogger(LogLevel level,
+                                   LogCategory category,
+                                   const char* pluginName,
+                                   const char* file,
+                                   int line) :
+      pimpl_(new PImpl),
+      level_(level),
+      stream_(&nullStream_),  // By default, logging to "/dev/null" is simulated
+      category_(category),
+      file_(file),
+      line_(line)
+    {
+      if (pluginContext_ != NULL)
+      {
+        // We are logging using the Orthanc plugin SDK
+
+        if (level_ == LogLevel_TRACE ||
+            !IsCategoryEnabled(level_, category))
+        {
+          // No trace level in plugins, directly exit as the stream is
+          // set to "/dev/null"
+          return;
+        }
+        else
+        {
+          if (enableThreadContexts_)
+          {
+            ThreadsInformations::CurrentThreadReader reader(threadsInformations_);
+            std::string prefix;
+            reader.FormatContext(prefix);
+            messageStream_ << prefix;
+          }
+        }
+      }
+      else
+      {
+        // We are logging in a standalone application, not inside an Orthanc plugin
+
+        if (!IsCategoryEnabled(level_, category))
+        {
+          // This logging level is disabled, directly exit as the
+          // stream is set to "/dev/null"
+          return;
+        }
+
+        std::string prefix;
+        GetLinePrefix(prefix, level_, pluginName, file, line, category);
+
+        {
+          // We lock the global mutex. The mutex is locked until the
+          // destructor is called: No change in the output can be done.
+          pimpl_->lock_.lock();
+
+          if (loggingStreamsContext_.get() == NULL)
+          {
+            // Have you called Orthanc::Logging::InitializePluginContext()?
+            fprintf(stderr, "ERROR: Trying to log a message after the finalization of the logging engine "
+                    "(or did you forgot to initialize it?)\n");
+            pimpl_->lock_.unlock();
+            return;
+          }
+
+          switch (level_)
+          {
+            case LogLevel_ERROR:
+              stream_ = &loggingStreamsContext_->GetError();
+              break;
+
+            case LogLevel_WARNING:
+              stream_ = &loggingStreamsContext_->GetWarning();
+              break;
+
+            case LogLevel_INFO:
+            case LogLevel_TRACE:
+              stream_ = &loggingStreamsContext_->GetInfo();
+              break;
+
+            default:  // Should not occur
+              stream_ = &loggingStreamsContext_->GetError();
+              break;
+          }
+
+          if (stream_ == &nullStream_)
+          {
+            // The logging is disabled for this level, we can release
+            // the global mutex.
+            pimpl_->lock_.unlock();
+          }
+          else
+          {
+            try
+            {
+              (*stream_) << prefix;
+            }
+            catch (...)
+            {
+              // Something is going really wrong, probably running out of
+              // memory. Fallback to a degraded mode.
+              stream_ = &loggingStreamsContext_->GetError();
+              (*stream_) << "E???? ??:??:??.?????? ] ";
+            }
+          }
+        }
+      }
+    }
+
+
+
+    InternalLogger::~InternalLogger()
+    {
+      if (pluginContext_ != NULL)
+      {
+        // We are logging through the Orthanc SDK
+
+        std::string message = messageStream_.str();
+
+        if (pluginContext_ != NULL)
+        {
+          if (!pluginName_.empty() &&
+              hasOrthancAdvancedLogging_)
+          {
+            _OrthancPluginLogMessage m;
+            m.category = category_;
+            m.level = level_;
+            m.file = file_;
+            m.line = line_;
+            m.plugin = pluginName_.c_str();
+            m.message = message.c_str();
+            pluginContext_->InvokeService(pluginContext_, _OrthancPluginService_LogMessage, &m);
+          }
+          else
+          {
+            switch (level_)
+            {
+              case LogLevel_ERROR:
+                pluginContext_->InvokeService(pluginContext_, _OrthancPluginService_LogError, message.c_str());
+                break;
+
+              case LogLevel_WARNING:
+                pluginContext_->InvokeService(pluginContext_, _OrthancPluginService_LogWarning, message.c_str());
+                break;
+
+              case LogLevel_INFO:
+                pluginContext_->InvokeService(pluginContext_, _OrthancPluginService_LogInfo, message.c_str());
+                break;
+
+              default:
+                break;
+            }
+          }
+        }
+      }
+      else if (stream_ != &nullStream_)
+      {
+        *stream_ << messageStream_.str() << "\n";
+        stream_->flush();
+
+        {
+          boost::shared_lock<boost::shared_mutex> lock(loggingListenersMutex_);
+
+          for (std::list<Orthanc::Logging::ILoggingListener*>::iterator it = loggingListeners_.begin(); it != loggingListeners_.end(); ++it)
+          {
+            try
+            {
+              (*it)->HandleLog(level_, category_, pluginName_, file_, line_, messageStream_.str());
+            }
+            catch (...) // NOLINT(bugprone-empty-catch)
+            {
+              // Don't throw in destructors
+            }
+          }
+        }
+      }
+
+      assert(pimpl_ != NULL);
+      delete pimpl_;
+    }
+
+
+    void Flush()
+    {
+      boost::mutex::scoped_lock lock(loggingStreamsMutex_);
+
+      if (loggingStreamsContext_.get() != NULL)
+      {
+        loggingStreamsContext_->Flush();
+      }
+    }
+
+
+    void SetErrorWarnInfoLoggingStreams(std::ostream& errorStream,
+                                        std::ostream& warningStream,
+                                        std::ostream& infoStream)
+    {
+      boost::mutex::scoped_lock lock(loggingStreamsMutex_);
+      loggingStreamsContext_.reset(new LoggingStreamsContext(errorStream, warningStream, infoStream));
+    }
+  }
+}
+
+#endif   // ORTHANC_ENABLE_LOGGING
+//  NOLINTEND(bugprone-reserved-identifier)

@@ -1,0 +1,27 @@
+syntax: glob
+ThirdPartyDownloads/
+CMakeLists.txt.user
+*.cpp.orig
+*.cpp.rej
+*.h.orig
+*.h.rej
+*.patch.orig
+*.patch.rej
+.vs/
+.vscode/
+*~
+*.cmake.orig
+.idea/
+OrthancFramework/Resources/CodeGeneration/.venv/
+
+# when opening Orthanc in VSCode, it might find a java project and create files we wan't to ignore:
+.settings/
+.classpath
+.project
+Resources/Testing/Issue32/Java/bin
+Resources/Testing/Issue32/Java/target
+build/
+
+# when opening Orthanc in Visual Studio, by default, it creates these files/folders:
+OrthancServer/CMakeSettings.json
+OrthancServer/out/

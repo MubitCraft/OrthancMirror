@@ -1,0 +1,384 @@
+/**
+ * Orthanc - A Lightweight, RESTful DICOM Store
+ * Copyright (C) 2012-2016 Sebastien Jodogne, Medical Physics
+ * Department, University Hospital of Liege, Belgium
+ * Copyright (C) 2017-2023 Osimis S.A., Belgium
+ * Copyright (C) 2024-2026 Orthanc Team SRL, Belgium
+ * Copyright (C) 2021-2026 Sebastien Jodogne, ICTEAM UCLouvain, Belgium
+ *
+ * This program is free software: you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ **/
+
+
+#pragma once
+
+#include "../../OrthancFramework/Sources/Images/FontRegistry.h"
+#include "../../OrthancFramework/Sources/WebServiceParameters.h"
+#include "../../OrthancFramework/Sources/DicomNetworking/RemoteModalityParameters.h"
+
+#include <OrthancServerResources.h>
+#include "ServerEnumerations.h"
+
+#include <boost/filesystem.hpp>
+#include <boost/thread/shared_mutex.hpp>
+#include <boost/thread/lock_types.hpp>
+#include <set>
+
+class DcmDataset;
+
+#define ORTHANC_CONFIG_NAME "Name"
+#define ORTHANC_CONFIG_DICOM_AET "DicomAet"
+#define ORTHANC_CONFIG_DICOM_PORT "DicomPort"
+#define ORTHANC_CONFIG_HTTP_PORT "HttpPort"
+#define ORTHANC_CONFIG_MAXIMUM_STORAGE_SIZE "MaximumStorageSize"
+#define ORTHANC_CONFIG_MAXIMUM_STORAGE_MODE "MaximumStorageMode"
+#define ORTHANC_CONFIG_MAXIMUM_PATIENT_COUNT "MaximumPatientCount"
+#define ORTHANC_CONFIG_CHECK_REVISIONS "CheckRevisions"
+#define ORTHANC_CONFIG_STORE_MD5_FOR_ATTACHMENTS "StoreMD5ForAttachments"
+#define ORTHANC_CONFIG_STORAGE_COMPRESSION "StorageCompression"
+#define ORTHANC_CONFIG_OVERWRITE_INSTANCES "OverwriteInstances"
+#define ORTHANC_CONFIG_INGEST_TRANSCODING "IngestTranscoding"
+#define ORTHANC_CONFIG_DATABASE_SERVER_IDENTIFIER "DatabaseServerIdentifier"
+#define ORTHANC_CONFIG_DICOM_DEFAULT_RETRIEVE_METHOD "DicomDefaultRetrieveMethod"
+#define ORTHANC_CONFIG_PATIENT_LEVEL_ENABLED "PatientLevelEnabled"
+#define ORTHANC_CONFIG_READ_ONLY "ReadOnly"
+#define ORTHANC_CONFIG_CONCURRENT_JOBS "ConcurrentJobs"
+#define ORTHANC_CONFIG_HTTP_THREADS_COUNT "HttpThreadsCount"
+#define ORTHANC_CONFIG_DICOM_THREADS_COUNT "DicomThreadsCount"
+#define ORTHANC_CONFIG_INDEX_DIRECTORY "IndexDirectory"
+#define ORTHANC_CONFIG_STORAGE_DIRECTORY "StorageDirectory"
+
+
+
+namespace Orthanc
+{
+  class DicomMap;
+  class DicomTag;
+  class HttpServer;
+  class ParsedDicomFile;
+  class ServerIndex;
+  class TemporaryFile;
+
+
+  class OrthancConfiguration : public boost::noncopyable
+  {
+  public:
+    enum RegisteredUsersStatus
+    {
+      RegisteredUsersStatus_NoConfiguration,  // There is no "RegisteredUsers" section in the configuration file
+      RegisteredUsersStatus_NoUser,           // The "RegisteredUsers" section is present, but declares no user
+      RegisteredUsersStatus_HasUser           // The "RegisteredUsers" section is present and contains at least 1 user
+    };
+
+  private:
+    typedef std::map<std::string, RemoteModalityParameters>   Modalities;
+    typedef std::map<std::string, WebServiceParameters>       Peers;
+    typedef std::map<std::string, unsigned int>               JobsEngineThreadsCount;
+
+    boost::shared_mutex                 mutex_;
+    Json::Value                         defaultConfiguration_;
+    std::list<boost::filesystem::path>  configurationPaths_;
+    Json::Value                         userConfiguration_;
+    boost::filesystem::path             defaultDirectory_;
+    FontRegistry                        fontRegistry_;
+    Modalities                          modalities_;
+    Peers                               peers_;
+    JobsEngineThreadsCount              jobsEngineThreadsCount_;
+    ServerIndex*                        serverIndex_;
+    std::set<Warnings>                  disabledWarnings_;
+
+    OrthancConfiguration();
+
+    void LoadModalitiesFromJson(const Json::Value& source);
+
+    void LoadPeersFromJson(const Json::Value& source);
+
+    void LoadModalities();
+
+    void LoadPeers();
+
+    void SaveModalitiesToJson(Json::Value& target);
+
+    void SavePeersToJson(Json::Value& target);
+
+    void SaveModalities();
+
+    void SavePeers();
+
+    static OrthancConfiguration& GetInstance();
+
+  public:
+    class ReaderLock : public boost::noncopyable
+    {
+    private:
+      OrthancConfiguration&                    configuration_;
+      boost::shared_lock<boost::shared_mutex>  lock_;
+
+    public:
+      ReaderLock() :
+        configuration_(GetInstance()),
+        lock_(configuration_.mutex_)
+      {
+      }
+
+      const OrthancConfiguration& GetConfiguration() const
+      {
+        return configuration_;
+      }
+
+      const Json::Value& GetJson() const
+      {
+        return configuration_.userConfiguration_;
+      }
+    };
+
+
+    class WriterLock : public boost::noncopyable
+    {
+    private:
+      OrthancConfiguration&                    configuration_;
+      boost::unique_lock<boost::shared_mutex>  lock_;
+
+    public:
+      WriterLock() :
+        configuration_(GetInstance()),
+        lock_(configuration_.mutex_)
+      {
+      }
+
+      OrthancConfiguration& GetConfiguration()
+      {
+        return configuration_;
+      }
+
+      const OrthancConfiguration& GetConfiguration() const
+      {
+        return configuration_;
+      }
+
+      const Json::Value& GetJson() const
+      {
+        return configuration_.userConfiguration_;
+      }
+    };
+
+
+    std::string GetConfigurationAbsolutePath() const;
+
+    const FontRegistry& GetFontRegistry() const
+    {
+      return fontRegistry_;
+    }
+
+    void Read(const std::list<boost::filesystem::path>& configurationPaths);
+
+    // "SetServerIndex()" must have been called
+    void LoadModalitiesAndPeers();
+
+    void LoadWarnings();
+
+    void LoadJobsEngineThreadsCount();
+
+    unsigned int GetJobsEngineWorkersThread(const std::string& jobType) const;
+
+    void RegisterFont(ServerResources::FileResourceId resource);
+
+    bool LookupStringParameter(std::string& target,
+                               const std::string& parameter) const;
+
+    // If the parameter is not part of the user configuration, it it retrieved from the default configuration
+    std::string GetStringParameter(const std::string& parameter) const;
+
+    bool LookupIntegerParameter(int& target,
+                                const std::string& parameter) const;
+
+    // If the parameter is not part of the user configuration, it it retrieved from the default configuration
+    int GetIntegerParameter(const std::string& parameter) const;
+
+    bool LookupUnsignedIntegerParameter(unsigned int& target,
+                                        const std::string& parameter) const;
+
+    // If the parameter is not part of the user configuration, it it retrieved from the default configuration
+    unsigned int GetUnsignedIntegerParameter(const std::string& parameter) const;
+
+    bool LookupBooleanParameter(bool& target,
+                                const std::string& parameter) const;
+
+    // If the parameter is not part of the user configuration, it it retrieved from the default configuration
+    bool GetBooleanParameter(const std::string& parameter) const;
+
+    void GetDicomModalityUsingSymbolicName(RemoteModalityParameters& modality,
+                                           const std::string& name) const;
+
+    bool LookupOrthancPeer(WebServiceParameters& peer,
+                           const std::string& name) const;
+
+    void GetListOfDicomModalities(std::set<std::string>& target) const;
+
+    void GetListOfOrthancPeers(std::set<std::string>& target) const;
+
+    unsigned int GetDicomLossyTranscodingQuality() const;
+
+    RegisteredUsersStatus SetupRegisteredUsers(HttpServer& httpServer,
+                                               bool& hasInsecureUser) const;
+
+    boost::filesystem::path InterpretStringParameterAsPath(const std::string& parameter) const;
+
+    void GetListOfStringsParameter(std::list<std::string>& target,
+                                   const std::string& key) const;
+
+    void GetSetOfStringsParameter(std::set<std::string>& target,
+                                  const std::string& key) const;
+
+    bool IsSameAETitle(const std::string& aet1,
+                       const std::string& aet2) const;
+
+    void LookupDicomModalitiesUsingAETitle(std::list<RemoteModalityParameters>& modalities,
+                                           const std::string& aet) const;
+
+    bool LookupDicomModalityUsingAETitle(RemoteModalityParameters& modality,
+                                         const std::string& aet) const;
+
+    bool IsKnownAETitle(const std::string& aet,
+                        const std::string& ip) const;
+
+    RemoteModalityParameters GetModalityUsingSymbolicName(const std::string& name) const;
+
+    RemoteModalityParameters GetModalityUsingAet(const std::string& aet) const;
+
+    void UpdateModality(const std::string& symbolicName,
+                        const RemoteModalityParameters& modality);
+
+    void RemoveModality(const std::string& symbolicName);
+
+    void UpdatePeer(const std::string& symbolicName,
+                    const WebServiceParameters& peer);
+
+    void RemovePeer(const std::string& symbolicName);
+
+    unsigned int GetConcurrentJobs() const;
+
+    unsigned int GetHttpThreadsCount() const
+    {
+      return GetUnsignedIntegerParameter(ORTHANC_CONFIG_HTTP_THREADS_COUNT);
+    }
+
+    unsigned int GetDicomThreadsCount() const
+    {
+      return GetUnsignedIntegerParameter(ORTHANC_CONFIG_DICOM_THREADS_COUNT);
+    }
+
+    void Format(std::string& result) const;
+
+    void SetDefaultEncoding(Encoding encoding);
+
+    bool HasConfigurationChanged() const;
+
+    void SetServerIndex(ServerIndex& index);
+
+    void ResetServerIndex();
+
+    TemporaryFile* CreateTemporaryFile() const;
+
+    std::string GetDefaultPrivateCreator() const;
+
+    void GetAcceptedTransferSyntaxes(std::set<DicomTransferSyntax>& target) const;
+
+    std::string GetDatabaseServerIdentifier() const;
+
+    bool IsWarningEnabled(Warnings warning) const
+    {
+      return disabledWarnings_.count(warning) == 0;
+    }
+
+    std::string GetOrthancAET() const;
+
+    std::string GetMaximumStorageMode() const
+    {
+      return GetStringParameter(ORTHANC_CONFIG_MAXIMUM_STORAGE_MODE);
+    }
+
+    std::string GetDicomDefaultRetrieveMethod() const
+    {
+      return GetStringParameter(ORTHANC_CONFIG_DICOM_DEFAULT_RETRIEVE_METHOD);
+    }
+
+    unsigned int GetMaximumStorageSize() const
+    {
+      return GetUnsignedIntegerParameter(ORTHANC_CONFIG_MAXIMUM_STORAGE_SIZE);
+    }
+
+    unsigned int GetMaximumPatientCount() const
+    {
+      return GetUnsignedIntegerParameter(ORTHANC_CONFIG_MAXIMUM_PATIENT_COUNT);
+    }
+
+    unsigned int GetDicomPort() const
+    {
+      return GetUnsignedIntegerParameter(ORTHANC_CONFIG_DICOM_PORT);
+    }
+
+    unsigned int GetHttpPort() const
+    {
+      return GetUnsignedIntegerParameter(ORTHANC_CONFIG_HTTP_PORT);
+    }
+
+    bool HasCheckRevisions() const
+    {
+      return GetBooleanParameter(ORTHANC_CONFIG_CHECK_REVISIONS);
+    }
+
+    bool HasStoreMD5ForAttachments() const
+    {
+      return GetBooleanParameter(ORTHANC_CONFIG_STORE_MD5_FOR_ATTACHMENTS);
+    }
+
+    bool HasStorageCompression() const
+    {
+      return GetBooleanParameter(ORTHANC_CONFIG_STORAGE_COMPRESSION);
+    }
+
+    bool HasPatientLevelEnabled() const
+    {
+      return GetBooleanParameter(ORTHANC_CONFIG_PATIENT_LEVEL_ENABLED);
+    }
+
+    static void DefaultExtractDicomSummary(DicomMap& target,
+                                           const ParsedDicomFile& dicom);
+
+    static void DefaultExtractDicomSummary(DicomMap& target,
+                                           DcmDataset& dicom);
+
+    static void DefaultDicomDatasetToJson(Json::Value& target,
+                                          const ParsedDicomFile& dicom);
+
+    static void DefaultDicomDatasetToJson(Json::Value& target,
+                                          DcmDataset& dicom,
+                                          const std::set<DicomTag>& ignoreTagLength);
+
+    static void DefaultDicomDatasetToJson(Json::Value& target,
+                                          const ParsedDicomFile& dicom,
+                                          const std::set<DicomTag>& ignoreTagLength);
+
+    static void DefaultDicomHeaderToJson(Json::Value& target,
+                                         const ParsedDicomFile& dicom);
+
+    static void ParseAcceptedTransferSyntaxes(std::set<DicomTransferSyntax>& target,
+                                              const Json::Value& source);
+
+    // This method provides backward compatibility against old configuration options
+    bool LookupCompatibilityLoaderThreads(unsigned int& threadsCount,
+                                          std::string& fromOption) const;
+  };
+}
