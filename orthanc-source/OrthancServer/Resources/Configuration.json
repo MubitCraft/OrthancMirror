@@ -58,7 +58,9 @@
   // can typically increase it to 20 and you should then monitor the
   // "orthanc_storage_available_threads" metrics to determine the
   // optimal value for your setup. (new in Orthanc 1.13.0)
-  "StorageLoaderThreadsCount": 4,
+  // Tuned for high-frequency, small-range WADO-RS RetrieveFrames
+  // requests issued by OHIF's Deep Zoom / WSI exploration.
+  "StorageLoaderThreadsCount": 8,
 
   // Peak amount of RAM (in MB) that can be allocated by the threads
   // loading from the storage area. Note that this limit can be
@@ -66,7 +68,8 @@
   // should monitor the "orthanc_storage_memory_usage_mb" and
   // "orthanc_storage_memory_max_usage_mb" metrics to determine the
   // optimal value for your setup. (new in Orthanc 1.13.0)
-  "StorageMemoryCapacity": 512,
+  // Raised for multi-GB WSI pyramid datasets.
+  "StorageMemoryCapacity": 2048,
 
   // List of paths to the custom Lua scripts that are to be loaded
   // into this instance of Orthanc
@@ -106,12 +109,21 @@
   // HTTP port for the REST services and for the GUI
   "HttpPort": 8042,
 
+  // Enable gzip compression of HTTP responses (REST API and
+  // DICOMweb). Recommended for OHIF Deep Zoom usage, where many small
+  // WADO-RS frame/metadata responses are issued during pan/zoom.
+  "HttpCompressionEnabled": true,
+
   "HttpBindAddresses": ["127.0.0.1"],
 
   // Allow the local OHIF development server to access DICOMweb.
+  // Read-only access for OHIF (QIDO-RS / WADO-RS); POST is kept for
+  // STOW-RS and Orthanc Explorer uploads. Upload-specific headers
+  // (Upload-Offset, Upload-Chunk-Sha256) are no longer needed since
+  // the chunked upload endpoint was removed.
   "HttpHeaders": {
     "Access-Control-Allow-Origin": "http://localhost:3000",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Accept, Content-Type, Origin, Authorization"
   },
 
@@ -323,7 +335,14 @@
   "DicomAlwaysAllowStore": true,
   "DicomWeb": {
     "Enable": true,
-    "Root": "/dicom-web/"
+    "Root": "/dicom-web/",
+    "EnableWado": true,
+    "WadoRoot": "/wado",
+    "StudiesMetadata": "Full",
+    "SeriesMetadata": "Full",
+    "EnableMetadataCache": true,
+    "MetadataWorkerThreadsCount": 4,
+    "WadoRsLoaderThreadsCount": 0
   },
 
   // Whether the Orthanc SCP allows incoming C-FIND requests, even
@@ -544,6 +563,12 @@
   // Set the timeout for HTTP requests issued by Orthanc (in seconds).
   // 0 means no timeout.
   "HttpTimeout": 60,
+
+  // Socket-level timeout (in seconds) for incoming HTTP requests
+  // handled by the embedded server (advanced option, 30 by default).
+  // Raised to 300 so that large WADO-RS frame transfers for WSI Deep
+  // Zoom are not cut off mid-transfer.
+  "HttpRequestTimeout": 300,
 
   // Enable the verification of the peers certificates during HTTPS
   // requests. Setting this option to "false" is equivalent to the

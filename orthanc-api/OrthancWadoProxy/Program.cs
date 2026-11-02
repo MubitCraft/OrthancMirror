@@ -1,5 +1,4 @@
-using FellowOakDicom;
-using OrthancWadoProxy.Configuration;
+using Microsoft.AspNetCore.Cors.Infrastructure;
 using OrthancWadoProxy.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -7,7 +6,6 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-builder.Services.AddFellowOakDicom();
 
 var orthancBaseUrl = builder.Configuration["Orthanc:BaseUrl"];
 if (!Uri.TryCreate(orthancBaseUrl, UriKind.Absolute, out var orthancUri) ||
@@ -21,23 +19,9 @@ var orthancBaseUri = new Uri(orthancUri.AbsoluteUri.TrimEnd('/') + "/");
 builder.Services.AddHttpClient<OrthancApiClient>(client =>
 {
     client.BaseAddress = orthancBaseUri;
-    client.Timeout = TimeSpan.FromSeconds(30);
-});
-
-builder.Services.Configure<ChunkedUploadOptions>(builder.Configuration.GetSection("ChunkedUpload"));
-builder.Services.Configure<OrthancDicomOptions>(builder.Configuration.GetSection("OrthancDicom"));
-builder.Services.Configure<WsiDicomizerOptions>(builder.Configuration.GetSection("WsiDicomizer"));
-builder.Services.AddSingleton<UploadIngestionQueue>();
-builder.Services.AddSingleton<ChunkedUploadStore>();
-builder.Services.AddSingleton<DicomStoreClient>();
-builder.Services.AddSingleton<WsiDicomizerClient>();
-builder.Services.AddHostedService<UploadIngestionWorker>();
-builder.Services.AddHostedService<UploadCleanupWorker>();
-
-builder.Services.AddHttpClient<OrthancInstancesClient>(client =>
-{
-    client.BaseAddress = orthancBaseUri;
-    client.Timeout = Timeout.InfiniteTimeSpan;
+    // Generous timeout so large WADO-RS / Deep Zoom frame transfers are not
+    // cut short mid-download (mirrors Orthanc's "HttpRequestTimeout").
+    client.Timeout = TimeSpan.FromSeconds(300);
 });
 
 builder.Services.AddHttpClient("OrthancDicomWeb", client =>
@@ -47,27 +31,30 @@ builder.Services.AddHttpClient("OrthancDicomWeb", client =>
 });
 
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+var allowedHeaders = builder.Configuration.GetSection("Cors:AllowedHeaders").Get<string[]>()
+    ?? ["Accept", "Content-Type", "Authorization", "Origin"];
+
+// Read-only OHIF access (QIDO-RS / WADO-RS): ingestion is handled exclusively
+// by Orthanc Explorer / REST API, so the proxy must not expose write methods.
+void ApplyReadOnlyCors(CorsPolicyBuilder policy)
+{
+    if (allowedOrigins.Length > 0)
+    {
+        policy.WithOrigins(allowedOrigins)
+            .WithMethods("GET", "HEAD", "OPTIONS")
+            .WithHeaders(allowedHeaders)
+            .AllowCredentials()
+            .WithExposedHeaders("Location", "Content-Range");
+    }
+}
+
 builder.Services.AddCors(options =>
 {
-    options.AddDefaultPolicy(policy =>
-    {
-        if (allowedOrigins.Length > 0)
-        {
-            policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials().WithExposedHeaders("Upload-Offset", "Upload-Chunk-Sha256", "Location", "Content-Range");
-        }
-    });
-
-    options.AddPolicy("DicomWebProxy", policy =>
-    {
-        if (allowedOrigins.Length > 0)
-        {
-            policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials().WithExposedHeaders("Upload-Offset", "Upload-Chunk-Sha256", "Location", "Content-Range");
-        }
-    });
+    options.AddDefaultPolicy(policy => ApplyReadOnlyCors(policy));
+    options.AddPolicy("DicomWebProxy", policy => ApplyReadOnlyCors(policy));
 });
 
 var app = builder.Build();
-DicomSetupBuilder.UseServiceProvider(app.Services);
 
 if (app.Environment.IsDevelopment())
 {
@@ -181,7 +168,7 @@ void MapOrthancProxy(string localRoot, string upstreamRoot, string[] methods)
 }
 
 MapOrthancProxy("/dicom-web", "dicom-web",
-    new[] { "GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS" });
+    new[] { "GET", "HEAD", "OPTIONS" });
 MapOrthancProxy("/wsi", "wsi", new[] { "GET", "HEAD", "OPTIONS" });
 
 app.Run();
