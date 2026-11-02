@@ -1,0 +1,484 @@
+/**
+ * Orthanc - A Lightweight, RESTful DICOM Store
+ * Copyright (C) 2012-2016 Sebastien Jodogne, Medical Physics
+ * Department, University Hospital of Liege, Belgium
+ * Copyright (C) 2017-2023 Osimis S.A., Belgium
+ * Copyright (C) 2024-2026 Orthanc Team SRL, Belgium
+ * Copyright (C) 2021-2026 Sebastien Jodogne, ICTEAM UCLouvain, Belgium
+ *
+ * This program is free software: you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ **/
+
+
+#include "../PrecompiledHeadersServer.h"
+#include "StorageCommitmentScpJob.h"
+
+#include "../../../OrthancFramework/Sources/DicomNetworking/DicomAssociation.h"
+#include "../../../OrthancFramework/Sources/DicomNetworking/DicomConnectionInfo.h"
+#include "../../../OrthancFramework/Sources/Logging.h"
+#include "../../../OrthancFramework/Sources/OrthancException.h"
+#include "../../../OrthancFramework/Sources/SerializationToolbox.h"
+#include "../OrthancConfiguration.h"
+#include "../ServerContext.h"
+
+
+static const char* ANSWER = "Answer";
+static const char* CALLED_AET = "CalledAet";            // obsolete from 1.12.10
+static const char* INDEX = "Index";
+static const char* LOOKUP = "Lookup";
+static const char* REMOTE_MODALITY = "RemoteModality";  // obsolete from 1.12.10
+static const char* CONNECTION = "Connection";           // new in 1.12.10
+static const char* SETUP = "Setup";
+static const char* SOP_CLASS_UIDS = "SopClassUids";
+static const char* SOP_INSTANCE_UIDS = "SopInstanceUids";
+static const char* TRANSACTION_UID = "TransactionUid";
+static const char* TYPE = "Type";
+
+
+
+namespace Orthanc
+{
+  class StorageCommitmentScpJob::StorageCommitmentCommand : public SetOfCommandsJob::ICommand
+  {
+  public:
+    virtual CommandType GetType() const = 0;
+  };
+
+
+  class StorageCommitmentScpJob::SetupCommand : public StorageCommitmentCommand
+  {
+  private:
+    StorageCommitmentScpJob&  that_;
+
+  public:
+    explicit SetupCommand(StorageCommitmentScpJob& that) :
+      that_(that)
+    {
+    }
+
+    virtual CommandType GetType() const ORTHANC_OVERRIDE
+    {
+      return CommandType_Setup;
+    }
+
+    virtual bool Execute(const std::string& jobId) ORTHANC_OVERRIDE
+    {
+      that_.Setup(jobId);
+      return true;
+    }
+
+    virtual void Serialize(Json::Value& target) const ORTHANC_OVERRIDE
+    {
+      target = Json::objectValue;
+      target[TYPE] = SETUP;
+    }
+  };
+
+
+  class StorageCommitmentScpJob::LookupCommand : public StorageCommitmentCommand
+  {
+  private:
+    StorageCommitmentScpJob&        that_;
+    size_t                          index_;
+    bool                            hasFailureReason_;
+    StorageCommitmentFailureReason  failureReason_;
+
+  public:
+    LookupCommand(StorageCommitmentScpJob&  that,
+                  size_t index) :
+      that_(that),
+      index_(index),
+      hasFailureReason_(false),
+      failureReason_(StorageCommitmentFailureReason_Success)
+    {
+    }
+
+    virtual CommandType GetType() const ORTHANC_OVERRIDE
+    {
+      return CommandType_Lookup;
+    }
+
+    virtual bool Execute(const std::string& jobId) ORTHANC_OVERRIDE
+    {
+      failureReason_ = that_.Lookup(index_);
+      hasFailureReason_ = true;
+      return true;
+    }
+
+    size_t GetIndex() const
+    {
+      return index_;
+    }
+
+    StorageCommitmentFailureReason GetFailureReason() const
+    {
+      if (hasFailureReason_)
+      {
+        return failureReason_;
+      }
+      else
+      {
+        throw OrthancException(ErrorCode_BadSequenceOfCalls);
+      }
+    }
+
+    virtual void Serialize(Json::Value& target) const ORTHANC_OVERRIDE
+    {
+      target = Json::objectValue;
+      target[TYPE] = LOOKUP;
+      target[INDEX] = static_cast<unsigned int>(index_);
+    }
+  };
+
+
+  class StorageCommitmentScpJob::AnswerCommand : public StorageCommitmentCommand
+  {
+  private:
+    StorageCommitmentScpJob&  that_;
+
+  public:
+    explicit AnswerCommand(StorageCommitmentScpJob& that) :
+      that_(that)
+    {
+      if (that_.ready_)
+      {
+        throw OrthancException(ErrorCode_BadSequenceOfCalls);
+      }
+      else
+      {
+        that_.ready_ = true;
+      }
+    }
+
+    virtual CommandType GetType() const ORTHANC_OVERRIDE
+    {
+      return CommandType_Answer;
+    }
+
+    virtual bool Execute(const std::string& jobId) ORTHANC_OVERRIDE
+    {
+      that_.Answer();
+      return true;
+    }
+
+    virtual void Serialize(Json::Value& target) const ORTHANC_OVERRIDE
+    {
+      target = Json::objectValue;
+      target[TYPE] = ANSWER;
+    }
+  };
+
+
+  class StorageCommitmentScpJob::Unserializer : public SetOfCommandsJob::ICommandUnserializer
+  {
+  private:
+    StorageCommitmentScpJob&  that_;
+
+  public:
+    explicit Unserializer(StorageCommitmentScpJob& that) :
+      that_(that)
+    {
+    }
+
+    virtual ICommand* Unserialize(const Json::Value& source) const ORTHANC_OVERRIDE
+    {
+      const std::string type = SerializationToolbox::ReadString(source, TYPE);
+
+      if (type == SETUP)
+      {
+        return new SetupCommand(that_);
+      }
+      else if (type == LOOKUP)
+      {
+        return new LookupCommand(that_, SerializationToolbox::ReadUnsignedInteger(source, INDEX));
+      }
+      else if (type == ANSWER)
+      {
+        return new AnswerCommand(that_);
+      }
+      else
+      {
+        throw OrthancException(ErrorCode_BadFileFormat);
+      }
+    }
+  };
+
+
+  void StorageCommitmentScpJob::CheckInvariants()
+  {
+    const size_t n = GetCommandsCount();
+
+    if (n <= 1)
+    {
+      THROW_WITH_FILE_AND_LINE_INFO(ErrorCode_InternalError);
+    }
+
+    for (size_t i = 0; i < n; i++)
+    {
+      const CommandType type = dynamic_cast<const StorageCommitmentCommand&>(GetCommand(i)).GetType();
+
+      if ((i == 0 && type != CommandType_Setup) ||
+          (i >= 1 && i < n - 1 && type != CommandType_Lookup) ||
+          (i == n - 1 && type != CommandType_Answer))
+      {
+        THROW_WITH_FILE_AND_LINE_INFO(ErrorCode_InternalError);
+      }
+
+      if (type == CommandType_Lookup)
+      {
+        const LookupCommand& lookup = dynamic_cast<const LookupCommand&>(GetCommand(i));
+        if (lookup.GetIndex() != i - 1)
+        {
+          THROW_WITH_FILE_AND_LINE_INFO(ErrorCode_InternalError);
+        }
+      }
+    }
+  }
+
+
+  void StorageCommitmentScpJob::Setup(const std::string& jobId)
+  {
+    CheckInvariants();
+
+    lookupHandler_.reset(context_.CreateStorageCommitment(jobId, transactionUid_, sopClassUids_,
+                                                          sopInstanceUids_, *connection_));
+  }
+
+
+  StorageCommitmentFailureReason StorageCommitmentScpJob::Lookup(size_t index)
+  {
+#ifndef NDEBUG
+    CheckInvariants();
+#endif
+
+    if (index >= sopClassUids_.size())
+    {
+      THROW_WITH_FILE_AND_LINE_INFO(ErrorCode_InternalError);
+    }
+    else if (lookupHandler_.get() != NULL)
+    {
+      return lookupHandler_->Lookup(sopClassUids_[index], sopInstanceUids_[index]);
+    }
+    else
+    {
+      // This is the default implementation of Orthanc (if no storage
+      // commitment plugin is installed)
+      bool success = false;
+      StorageCommitmentFailureReason reason =
+        StorageCommitmentFailureReason_NoSuchObjectInstance /* 0x0112 == 274 */;
+
+      try
+      {
+        std::vector<std::string> orthancId;
+        context_.GetIndex().LookupIdentifierExact(orthancId, ResourceType_Instance, DICOM_TAG_SOP_INSTANCE_UID, sopInstanceUids_[index]);
+
+        if (orthancId.size() == 1)
+        {
+          std::string a, b;
+
+          // Make sure that the DICOM file can be re-read by DCMTK
+          // from the file storage, and that the actual SOP
+          // class/instance UIDs do match
+
+          std::unique_ptr<DicomDataSource::Dicom> dicom(context_.ReadParsedDicom(orthancId[0]));
+          DicomDataSource::Dicom::Lock lock(*dicom);
+
+          if (lock.GetContent().GetTagValue(a, DICOM_TAG_SOP_CLASS_UID) &&
+              lock.GetContent().GetTagValue(b, DICOM_TAG_SOP_INSTANCE_UID) &&
+              b == sopInstanceUids_[index])
+          {
+            if (a == sopClassUids_[index])
+            {
+              success = true;
+              reason = StorageCommitmentFailureReason_Success;
+            }
+            else
+            {
+              // Mismatch in the SOP class UID
+              reason = StorageCommitmentFailureReason_ClassInstanceConflict /* 0x0119 */;
+            }
+          }
+        }
+      }
+      catch (OrthancException&)  // NOLINT(bugprone-empty-catch)
+      {
+      }
+
+      LOG(INFO) << "  Storage commitment SCP job: " << (success ? "Success" : "Failure")
+                << " while looking for " << sopClassUids_[index] << " / " << sopInstanceUids_[index];
+
+      return reason;
+    }
+  }
+
+
+  void StorageCommitmentScpJob::Answer()
+  {
+    CheckInvariants();
+    LOG(INFO) << "  Storage commitment SCP job: Sending answer";
+
+    std::vector<StorageCommitmentFailureReason> failureReasons;
+    failureReasons.reserve(sopClassUids_.size());
+
+    for (size_t i = 1; i < GetCommandsCount() - 1; i++)
+    {
+      const LookupCommand& lookup = dynamic_cast<const LookupCommand&>(GetCommand(i));
+      failureReasons.push_back(lookup.GetFailureReason());
+    }
+
+    if (failureReasons.size() != sopClassUids_.size())
+    {
+      THROW_WITH_FILE_AND_LINE_INFO(ErrorCode_InternalError);
+    }
+
+    DicomAssociationParameters parameters(connection_->GetCalledAet(), remoteModality_);
+    DicomAssociation::ReportStorageCommitment(
+      parameters, transactionUid_, sopClassUids_, sopInstanceUids_, failureReasons);
+  }
+
+
+  StorageCommitmentScpJob::StorageCommitmentScpJob(ServerContext& context,
+                                                   const std::string& transactionUid,
+                                                   const DicomConnectionInfo& connection) :
+    context_(context),
+    ready_(false),
+    transactionUid_(transactionUid),
+    connection_(new DicomConnectionInfo(connection))
+  {
+    {
+      OrthancConfiguration::ReaderLock lock;
+      if (!lock.GetConfiguration().LookupDicomModalityUsingAETitle(remoteModality_, connection_->GetRemoteAet()))
+      {
+        throw OrthancException(ErrorCode_InexistentItem,
+                               "Unknown remote modality for storage commitment SCP: " + connection_->GetRemoteAet());
+      }
+    }
+
+    AddCommand(new SetupCommand(*this));
+  }
+
+
+  void StorageCommitmentScpJob::Reserve(size_t size)
+  {
+    if (ready_)
+    {
+      throw OrthancException(ErrorCode_BadSequenceOfCalls);
+    }
+    else
+    {
+      SetOfCommandsJob::Reserve(size);
+
+      sopClassUids_.reserve(size);
+      sopInstanceUids_.reserve(size);
+    }
+  }
+
+
+  void StorageCommitmentScpJob::AddInstance(const std::string& sopClassUid,
+                                            const std::string& sopInstanceUid)
+  {
+    if (ready_)
+    {
+      throw OrthancException(ErrorCode_BadSequenceOfCalls);
+    }
+    else
+    {
+      assert(sopClassUids_.size() == sopInstanceUids_.size());
+      AddCommand(new LookupCommand(*this, sopClassUids_.size()));
+      sopClassUids_.push_back(sopClassUid);
+      sopInstanceUids_.push_back(sopInstanceUid);
+    }
+  }
+
+
+  void StorageCommitmentScpJob::MarkAsReady()
+  {
+    AddCommand(new AnswerCommand(*this));
+  }
+
+
+  void StorageCommitmentScpJob::GetPublicContent(Json::Value& value) const
+  {
+    SetOfCommandsJob::GetPublicContent(value);
+
+    value["CalledAet"] = connection_->GetCalledAet();
+    value["RemoteAet"] = connection_->GetRemoteAet();
+    value["RemoteIp"] = connection_->GetRemoteIp();
+    value["TransactionUid"] = transactionUid_;
+  }
+
+
+  StorageCommitmentScpJob::StorageCommitmentScpJob(ServerContext& context,
+                                                   const Json::Value& serialized) :
+    SetOfCommandsJob(new Unserializer(*this), serialized),
+    context_(context),
+    ready_(false),
+    transactionUid_(SerializationToolbox::ReadString(serialized, TRANSACTION_UID))
+  {
+
+    if (serialized.isMember(CONNECTION))
+    {
+      connection_.reset(new DicomConnectionInfo(serialized[CONNECTION]));
+    }
+    else if (serialized.isMember(REMOTE_MODALITY) && serialized[REMOTE_MODALITY].isObject()) // the job was serialized prior to 1.12.10
+    {
+      std::string calledAet = SerializationToolbox::ReadString(serialized, CALLED_AET);
+      std::string remoteAet = SerializationToolbox::ReadString(serialized[REMOTE_MODALITY], "AET");
+      std::string remoteIp = SerializationToolbox::ReadString(serialized[REMOTE_MODALITY], "Host");
+      connection_.reset(new DicomConnectionInfo(remoteIp, remoteAet, calledAet));
+    }
+
+    if (connection_.get() == NULL)
+    {
+      throw OrthancException(ErrorCode_InternalError, "Failed to unserialize StorageCommitmentScpJob");
+    }
+
+    {
+      OrthancConfiguration::ReaderLock lock;
+      if (!lock.GetConfiguration().LookupDicomModalityUsingAETitle(remoteModality_, connection_->GetRemoteAet()))
+      {
+        throw OrthancException(ErrorCode_InexistentItem,
+                               "Unknown remote modality for storage commitment SCP: " + connection_->GetRemoteAet());
+      }
+    }
+
+    SerializationToolbox::ReadArrayOfStrings(sopClassUids_, serialized, SOP_CLASS_UIDS);
+    SerializationToolbox::ReadArrayOfStrings(sopInstanceUids_, serialized, SOP_INSTANCE_UIDS);
+  }
+
+
+  bool StorageCommitmentScpJob::Serialize(Json::Value& target) const
+  {
+    if (!SetOfCommandsJob::Serialize(target))
+    {
+      return false;
+    }
+    else
+    {
+      target[TRANSACTION_UID] = transactionUid_;
+
+      if (connection_.get() == NULL)
+      {
+        throw (OrthancException(ErrorCode_InternalError));
+      }
+
+      target[CONNECTION] = Json::objectValue;
+      connection_->Serialize(target[CONNECTION]);
+
+      SerializationToolbox::WriteArrayOfStrings(target, sopClassUids_, SOP_CLASS_UIDS);
+      SerializationToolbox::WriteArrayOfStrings(target, sopInstanceUids_, SOP_INSTANCE_UIDS);
+      return true;
+    }
+  }
+}

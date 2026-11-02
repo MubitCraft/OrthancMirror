@@ -1,0 +1,2 @@
+These files come from the "contrib/minizip" directory in zlib.
+The Python script "./SyncMinizip.py" can be used to update the version of minizip.
